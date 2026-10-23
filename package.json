@@ -1,0 +1,27 @@
+{
+  "name": "lego-site",
+  "version": "1.0.0",
+  "private": true,
+  "main": "server.js",
+  "dependencies": {
+    "@resvg/resvg-js": "^2.6.2",
+    "bcryptjs": "^3.0.3",
+    "cookie-parser": "^1.4.7",
+    "express": "^4.21.0",
+    "helmet": "^8.3.0",
+    "nodemailer": "^10.2.1",
+    "pg": "^8.23.1",
+    "pino": "^10.4.0",
+    "pino-http": "^11.0.0",
+    "sharp": "^0.35.5",
+    "sql.js": "^1.15.1",
+    "three": "0.170.0"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "test": "node tests/security.test.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

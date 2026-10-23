@@ -1,0 +1,21 @@
+<!doctype html><html><head><meta charset="utf-8"><style>body{margin:0;background:#fff}</style>
+<script type="importmap">{"imports":{"three":"/vendor/three/build/three.module.js","three/addons/":"/vendor/three/examples/jsm/"}}</script></head>
+<body><canvas id="c" width="256" height="256"></canvas>
+<script type="module">
+import * as THREE from 'three';
+import { LDrawLoader } from 'three/addons/loaders/LDrawLoader.js';
+import { LDrawConditionalLineMaterial } from 'three/addons/materials/LDrawConditionalLineMaterial.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { headMeshes } from '/heads_lib.js';
+const r = new THREE.WebGLRenderer({ canvas: document.getElementById('c'), antialias: true, preserveDrawingBuffer: true }); r.outputColorSpace = THREE.SRGBColorSpace; r.toneMapping = THREE.NeutralToneMapping;
+const scene = new THREE.Scene(); scene.background = new THREE.Color('#fff'); scene.environment = new THREE.PMREMGenerator(r).fromScene(new RoomEnvironment(), 0.04).texture;
+const l = new THREE.DirectionalLight('#fff', 1.4); l.position.set(-40, 60, 120); scene.add(l);
+const cam = new THREE.PerspectiveCamera(22, 1, 1, 1000); cam.position.set(0, 0, 90); cam.lookAt(0, 0, 0);
+const loader = new LDrawLoader(); loader.setConditionalLineMaterial(LDrawConditionalLineMaterial); loader.setPartsLibraryPath('/ldraw/lib/'); loader.smoothNormals = true;
+await loader.preloadMaterials('/ldraw/lib/ldconfig.ldr'); window.LD = loader;
+let cur = null;
+window.show = async (part, skin = '#F2CD37') => { if (cur) scene.remove(cur);
+  const txt = await (await fetch('/ldraw/lib/parts/' + part + '.dat')).text(); const g = await new Promise((res, rej) => loader.parse(txt, res, rej));
+  cur = headMeshes(g, skin); cur.rotation.x = Math.PI; cur.position.y = 10; scene.add(cur); r.render(scene, cam); return true; };
+window.READY = true;
+</script></body></html>

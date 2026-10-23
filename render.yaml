@@ -1,0 +1,31 @@
+services:
+  - type: web
+    name: lego-dviynyk
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: ACCOUNTS_ENABLED
+        value: "false"
+      - key: PII_ENC_KEY
+        sync: false
+      - key: PII_INDEX_KEY
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: MAIL_PROVIDER
+        sync: false
+      - key: MAIL_FROM
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
