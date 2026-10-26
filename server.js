@@ -36,6 +36,8 @@ app.use('/api', (req, res, next) => {
 
 // Fast model failover: per-model timeout, cooldown for failing models, hedged parallel attempts (2 at a time)
 const health = new Map(); // model -> {until, lat}
+const DEAD = new Set(); // models that answered 404 (retired) — skipped for the process lifetime
+let quotaUntil = 0; // after a confirmed quota error stop calling Gemini for a short while (no hammering)
 const log = (...a) => logger.info({ evt: 'app' }, a.map(x => typeof x === 'string' ? x : (x && x.message) || JSON.stringify(x)).join(' ').slice(0, 500));
 async function callModel(m, body, timeout) {
   const t0 = Date.now();
@@ -44,6 +46,7 @@ async function callModel(m, body, timeout) {
       method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': KEY }, body: JSON.stringify(body), signal: AbortSignal.timeout(timeout) });
     const j = await r.json().catch(() => ({}));
     if (r.ok && j.candidates?.length) { health.set(m, { until: 0, lat: Date.now() - t0 }); log('ok', m, Date.now() - t0, 'ms'); return j; }
+    if (r.status === 404) DEAD.add(m); // model retired for this key: never call it again (each call burns request quota)
     const cd = r.status === 429 ? 300e3 : r.status === 404 ? 3600e3 : r.status === 400 ? 60e3 : 30e3;
     health.set(m, { until: Date.now() + cd, lat: 99e3 });
     throw new Error(`${m}: ${r.status} ${(j.error?.message || 'empty').slice(0, 120)}`);
@@ -54,6 +57,8 @@ async function callModel(m, body, timeout) {
 }
 const { AsyncLocalStorage } = require('async_hooks'); const ALS = new AsyncLocalStorage();
 const EXTRA_MODELS = (process.env.EXTRA_MODELS || 'gemini-2.5-flash,gemini-2.5-flash-lite,gemini-pro-latest,gemini-3.1-pro-preview,gemini-2.5-pro').split(',');
+const QUOTA_MSG = 'Безкоштовний ліміт запитів до Gemini на сьогодні вичерпано — це не помилка з вашого боку. Ліміт оновлюється щодня (близько 10:00 за Києвом). Спробуйте пізніше або завтра вранці.';
+const BUSY_MSG = 'Gemini зараз дуже завантажений, і кілька спроб поспіль не вдалися (~90 с). Нічого не зламано — спробуйте ще раз за 1–2 хвилини.';
 const isQuota = m => /429/.test(m) && /quota|exceeded|per day|PerDay|RESOURCE_EXHAUSTED/i.test(m);
 async function gemOnce(models, body, timeout, parallel, budget, ignoreCd) {
   const t0 = Date.now(); const now = Date.now();
@@ -70,21 +75,24 @@ async function gemOnce(models, body, timeout, parallel, budget, ignoreCd) {
 async function gem(models, body, { timeout = 20000, parallel = 2, budget = 45000 } = {}) {
   timeout = Math.max(timeout, 20000);
   const imgCall = models === IMG_MODELS;
-  const all = imgCall ? models : [...new Set([...models, ...EXTRA_MODELS])];
+  const all = (imgCall ? models : [...new Set([...models, ...EXTRA_MODELS])]).filter(m => !DEAD.has(m));
+  if (Date.now() < quotaUntil) { const e = new Error(QUOTA_MSG); e.quota = true; throw e; }
   const T0 = Date.now(), TOTAL = 90000; const st = ALS.getStore(); let errs = [];
   for (let n = 1; ; n++) {
     const left = TOTAL - (Date.now() - T0);
     const r = await gemOnce(all, body, Math.min(timeout, Math.max(left, 5000)), parallel, Math.min(budget, Math.max(left, 5000)), n > 1);
     if (r.j) return r.j;
     errs = r.errs;
-    if (errs.length && errs.every(isQuota)) { const e = new Error('Денну безкоштовну квоту Gemini вичерпано (429 quota). Спробуйте пізніше — квота оновлюється щодня (близько 10:00 за Києвом).'); e.quota = true; throw e; }
+    const real = errs.filter(x => !/: 404 /.test(x)); // retired models say nothing about the quota
+    if (real.length && real.every(isQuota)) { quotaUntil = Date.now() + 120e3; log('gem quota exhausted', real.slice(-2).join(' | ')); const e = new Error(QUOTA_MSG); e.quota = true; throw e; }
     const wait = Math.min(3000 * 2 ** (n - 1), 15000);
     if (Date.now() - T0 + wait > TOTAL) break;
     if (st) st.set(`Gemini перевантажений, пробую ще раз (спроба ${n + 1})…`);
     log('gem retry', n + 1, 'wait', wait);
     await new Promise(z => setTimeout(z, wait));
   }
-  throw new Error('Усі моделі Gemini зараз перевантажені (пробував ~90 с), спробуйте ще раз за хвилину. ' + errs.slice(-2).join(' | '));
+  log('gem gave up', errs.slice(-3).join(' | ')); // technical details only in the server log, never shown to the user
+  const e = new Error(BUSY_MSG); e.busy = true; throw e; // mixed 429+503 is NOT proven quota (pro models always 429 on the free tier)
 }
 const fastCfg = (c = {}) => c; // thinkingBudget:0 is rejected (400) by gemini 3.5/latest lite models
 const txt = j => (j.candidates?.[0]?.content?.parts || []).map(p => p.text || '').join('');
@@ -92,7 +100,7 @@ const parseJSON = s => { s = s.replace(/```json|```/g, ''); const i = Math.min(.
 const img = (b64, mime) => ({ inline_data: { mime_type: mime || 'image/jpeg', data: b64 } });
 const jobs = new Map(); let jid = 0;
 const wrap = fn => (req, res) => { const id = (++jid).toString(36) + Math.random().toString(36).slice(2, 8); const job = { status: 'pending', t: Date.now() }; jobs.set(id, job);
-  ALS.run({ set: x => { job.stage = x; } }, () => fn(req.body, st => { job.stage = st; })).then(r => { job.status = 'done'; job.result = r; }).catch(e => { console.error(e); job.status = 'error'; job.error = String(e.message || e).replace(KEY || '§', '***'); });
+  ALS.run({ set: x => { job.stage = x; } }, () => fn(req.body, st => { job.stage = st; })).then(r => { job.status = 'done'; job.result = r; }).catch(e => { console.error(e); job.status = 'error'; job.code = e.quota ? 'quota' : e.busy ? 'busy' : undefined; job.error = String(e.message || e).replace(KEY || '§', '***'); });
   res.json({ job: id }); };
 app.get('/job/:id', (req, res) => { const j = jobs.get(req.params.id); if (!j) return res.status(404).json({ status: 'error', error: 'Завдання не знайдено' }); res.json(j); if (j.status !== 'pending') setTimeout(() => jobs.delete(req.params.id), 600000); });
 setInterval(() => { for (const [k, v] of jobs) if (Date.now() - v.t > 1800000) jobs.delete(k); }, 600000);
@@ -492,6 +500,8 @@ CLOTHING vs OCCLUDERS (CRITICAL — most common mistake): before designing print
 PATTERNS / EMBROIDERY: decorative patterns on pale or pastel garments are tiny, thin and tone-on-tone (muted pastel, 20-40% contrast), spread sparsely along the outer edges / hem — never big solid colour blobs. Each single spot must stay below ~8x8 units of the 0..100 box; at most ~10 motifs per garment; no saturated green/red/blue patches on white.
 ARMS & HELD ITEMS: the figure has a fixed neutral pose — both arms hang along the body and the hands stay at the hips (never raised, never covering torso/trousers). Do NOT model things the person merely carries, holds or hugs (bundle of branches/firewood, flowers, book, phone, umbrella, cup, food, pet, child): SKIP them (mention in accessories_uk only). accessories_3d may contain ONLY items that exist in the type list; never map an unsupported object to the nearest weapon (branch/stick/pole/umbrella != sword).
 WIDE / LONG TROUSERS are trousers, not a skirt: legs_type stays "standard", fill leg_color with the trouser colour, add vertical fold lines on both legs; a wide hem hides the shoes — footwear gets "height":"low" (only the toe is visible) and its colour is separate from the trousers (black shoes under white trousers are black, not a black block half the leg). Hoodies/sweatshirts: main colour = the real LEGO colour closest in hue (dark burgundy/maroon => Dark Red #720E0F, not Reddish Brown), only quiet same-hue seams (pocket, hood opening, zip) — no extra strokes.
+CROPPED PHOTOS (waist-up / bust / head only): FIRST state inspection.framing (full_body|knees_up|thighs_up|waist_up|bust|head). Whatever is below the frame is INFERRED from the visible upper garment, never invented at random: (a) one-piece garments — dress, shirt-dress, belted long shirt/blouse whose colour/pattern runs unbroken to the bottom edge, robe, kimono, coat-dress, gown — continue downward => legs_type "skirt" (knee length) or "long_robe"/"dress_slope" (long), skirt_color = the garment colour, NO trousers; (b) two-piece looks — jacket, blazer, hoodie, sweater, shirt tucked or hanging with a visible waistband, leather/denim jacket, suit — => trousers: legs_type "standard", plain neutral trousers (jeans blue #0A3463 / black #1B2A34 / khaki), plain dark shoes, NEVER a skirt and no invented prints; a man is never put in a skirt unless the garment is clearly a robe/kilt. Set inspection.lower_visible=false and inspection.lower_garment ("dress|skirt|trousers|jeans|shorts|unknown") and keep the choice consistent with the top.
+ANIMALS (tiger, lion, dog, cat, horse, bird...): set subject_kind "animal" (id step) — it is NOT a person: do not use classic yellow skin or a human face story. Build an "animal-costume" minifigure: skin_color = the fur colour (tiger #CC702A / orange, lion #AA7D55 or #DCBC81, golden dog #DCBC81, wolf #A0A5A9), headgear "hood_fur" in the fur colour, hair_style none, torso/arm/leg colours = fur with the real markings printed as simple shapes (tiger stripes = black bands, lion mane = darker brown collar band, spots), pale chest/belly patch, no bust, no lashes, no weapons/bags, face expression neutral. identity = the species. notes_uk must say it is an animal costume figure.
 STEP 4 layout rules: (a) symmetric around the torso centre line x=50 unless the costume is truly asymmetric; (b) the main motif is centred (neckline/chest/stole/belt); (c) lines CONTINUE: a stole, trim or sash that runs down the torso front must also appear on the back and on BOTH sleeves (same colour band in arm_print_svg), belts wrap to the back; (d) trims follow garment edges (neckline V, hem at y≈92-100, cuffs at arm y≈85-100); (e) contrast: accent colour on the main colour; thin black/dark outlines (stroke-width 0.8-1.5) for folds; (f) 6-20 purposeful shapes, not more; (g) the back print continues the clothing (seams, belt, cape/stole) + the author touch emblem.
 PARTS: use only real, buyable LEGO parts from the enums (they map to BrickLink/LDraw parts). For robed / hooded archetypes the hood (30381) + cape (4524) + long_robe (36036) combo works well, but it is only ONE option — choose parts that fit THIS character.
 QUALITY BAR: official LEGO minifigures are the baseline — aim higher: more detail (fine trims, stitching, embroidery patterns, small emblems), print on legs/hips/back/arms where it makes sense. Gold and silver motifs are printed in METALLIC ink (use Pearl Gold #DCBC81 / Flat Silver #898788 / Metallic Silver #C0C4C8 exactly — the renderer makes them shiny).
@@ -504,8 +514,8 @@ EXAMPLES of good specs (style reference, adapt — do not copy blindly):
 const SPEC_DOC = `Minifigure spec JSON (all colors as #rrggbb hex):
 {"_identity_rule":"If the subject is a recognised character, ALL character-defining features (e.g. a metal mask, eye patch, scar, face paint, signature colours) MUST appear in the spec — masks/markings are PRINTED on the face via face.mask / face.face_extra_svg; when a mask hides the face set face.mask and the renderer skips official face prints",
  "design":{"concept":"STEP 1","motifs":["STEP 2"],"palette":["STEP 3 hex colours"]},
- "inspection":{"occluders":"things that merely OVERLAP the clothing in the photo (leaves, branches, hair, bags, hands, shadows) and must NOT be printed; held items and arm pose","hair":"bangs?, length, partings, braids/ponytails/twin tails, ornaments+colors","face":"eye style/color, lashes, brows, lips, blush, marks","torso_front":"neckline shape, exposed skin areas (where exactly), collar, trims, lace, patterns, belts","torso_back":"","arms":"sleeve length/shape vs bare skin, cuffs, gloves","hips":"","legs":"skirt/dress hem height %, stockings/boots colors, top heights in % from hips (0) to feet (100), skin gaps, shoes","accessories":""},
- "identity":"","is_known_character":bool,
+ "inspection":{"occluders":"things that merely OVERLAP the clothing in the photo (leaves, branches, hair, bags, hands, shadows) and must NOT be printed; held items and arm pose","hair":"bangs?, length, partings, braids/ponytails/twin tails, ornaments+colors","face":"eye style/color, lashes, brows, lips, blush, marks","torso_front":"neckline shape, exposed skin areas (where exactly), collar, trims, lace, patterns, belts","torso_back":"","arms":"sleeve length/shape vs bare skin, cuffs, gloves","hips":"","framing":"full_body|knees_up|thighs_up|waist_up|bust|head — how much of the subject the photo shows","lower_visible":"false when legs are NOT visible (cropped)","lower_garment":"dress|skirt|trousers|jeans|shorts|unknown — what is worn below; if cropped, INFER it from the top (see CROPPED PHOTOS)","legs":"skirt/dress hem height %, stockings/boots colors, top heights in % from hips (0) to feet (100), skin gaps, shoes","accessories":""},
+ "identity":"","is_known_character":bool,"subject_kind":"human|animal|creature|figurine|object",
  "skin_color":"color of the FACE/HANDS SKIN only (never the hair!). Real-life humans (photos of ordinary or real people): classic LEGO yellow #F2CD37. Known fictional characters: their real skin color (pale/white humans: warm off-white like #F3E6E2, NOT bluish unless the skin is clearly blue in IMAGE A; green turtles #4B9F4A, etc.)",
  "hair_style":"SHORT ordinary hair => ALWAYS an official short piece (short / short_side). Otherwise pick the LEGO hairpiece closest to the silhouette — or \"sculpt\" when NO catalog piece really matches (natural loose curls, textured messy hair with a fringe on the forehead, long anime hair with distinct strands + bangs); then fill hair_sculpt. One of: sculpt|none|short|short_side|spiky|curly|bob|mid_length|long|long_straight|long_wavy|long_bangs|ponytail (ponytail+fringe)|ponytail_side (off-centre)|side_braid (long, braided on one side)|twin_tails (high pigtails + long bangs)|pigtails_braided|bun (low bun swept back, no fringe)|bun_low_fringe (LOW / messy bun at the BACK of the head with fringe or loose face-framing strands)|bun_high (large high bun on top, no fringe)|bun_fringe (HIGH top-knot bun ON TOP + fringe — only if the bun is really on top of the head)|cap|hood|helmet_knight|bandana_tails (bandana_tails = ninja-turtle mask band with tails; then hair_color = bandana color)",
  "head_mold":"standard (classic round head, default for humans) | turtle (TMNT turtle head mold, for ninja turtles) | snake (snake/reptile head mold, e.g. Serpentine). Special molds only when the character clearly is that creature",
@@ -574,7 +584,7 @@ app.post('/api/generate', wrap(async ({ image, mime, crop, subject, description,
   const steps = []; const step = m => { steps.push(`[${el()}] ${m}`); stage(m); };
   step('1/5 Аналізую обраного персонажа…');
   const idj = await gem(TEXT_MODELS, { contents: [{ parts: [img(cr.data, cr.mime), { text: `Hint from earlier analysis: ${JSON.stringify(description || {}).slice(0, 800)}.
-Identify this subject. Return JSON {"is_known_character":bool (fictional character from a movie/animated series/game/comic, or a famous real person),"character_name":"","identity":"e.g. Lyra (Men in Black: The Series)","franchise":"","medium":"animated|live-action|game|comic|photo","fandom_wiki":"the real existing fandom.com wiki subdomain for this franchise (e.g. tmnt → turtlepedia, Star Wars → starwars, Men in Black → meninblack)","fandom_wiki_alternatives":["2-3 more plausible subdomains"],"wikipedia_title":"or null","is_real_photo_of_real_person":bool}` }] }],
+Identify this subject. Return JSON {"is_known_character":bool (fictional character from a movie/animated series/game/comic, or a famous real person),"character_name":"","identity":"e.g. Lyra (Men in Black: The Series)","franchise":"","medium":"animated|live-action|game|comic|photo","subject_kind":"human|animal|creature|figurine|object (a real animal such as tiger/lion/dog is \"animal\", never \"human\")","fandom_wiki":"the real existing fandom.com wiki subdomain for this franchise (e.g. tmnt → turtlepedia, Star Wars → starwars, Men in Black → meninblack)","fandom_wiki_alternatives":["2-3 more plausible subdomains"],"wikipedia_title":"or null","is_real_photo_of_real_person":bool}` }] }],
     generationConfig: { responseMimeType: 'application/json', temperature: 0.2 } }, { timeout: 10000 });
   const id = parseJSON(txt(idj));
   let refs = [];
@@ -592,8 +602,8 @@ ${DESIGN_GUIDE}
 ${SPEC_DOC}
 ${FIXED ? `LOCKED PARTS (the user locked them — copy these values EXACTLY, design everything else to fit them): ${JSON.stringify({ ...FIXED, torso_graphic_png: undefined }).slice(0, 6000)}\n` : ''}Return ONLY the JSON, plus "refs_matching":[integers only, e.g. [1,3]] and "checklist":["4-6 key visual features to verify"].` });
   const sj = await gem(TEXT_MODELS, { contents: [{ parts }], generationConfig: { responseMimeType: 'application/json', temperature: 0.15, seed: 4242 } }, { timeout: 40000, budget: 55000 });
-  let spec = parseJSON(txt(sj));
-  if (!id.is_known_character) { // ordinary real people → classic LEGO yellow skin
+  let spec = parseJSON(txt(sj)); if (Array.isArray(spec)) spec = spec.find(o => o && typeof o === 'object' && !Array.isArray(o)) || {};
+  if (!id.is_known_character && !rules.isAnimal(id, description, spec)) { // ordinary real people → classic LEGO yellow skin
     const old = spec.skin_color; spec.skin_color = '#F2CD37'; if (!spec.hand_color || spec.hand_color === old) spec.hand_color = '#F2CD37'; if (spec.arm_color === old) spec.arm_color = '#F2CD37'; }
   const fixHands = sp => { if (sp && sp.hands_are_gloves !== true && sp.skin_color) sp.hand_color = sp.skin_color; normSpec(sp); };
   function normSpec(sp) { if (!sp) return;
@@ -632,7 +642,7 @@ ${FIXED ? `LOCKED PARTS (the user locked them — copy these values EXACTLY, des
     const cap = acc.find(a => a && a.type === 'cap'); if (cap && (!sp.headgear || sp.headgear === 'none')) { sp.headgear = 'cap'; sp.headgear_color = sp.headgear_color || cap.color; }
     sp.accessories_3d = acc.filter(a => a && !/glass|goggle|^cap$/.test(a.type || ''));
     if (['cap', 'hood', 'helmet_knight'].includes(sp.hair_style) && (!sp.headgear || sp.headgear === 'none')) { sp.headgear = sp.hair_style; sp.headgear_color = sp.headgear_color || sp.hair_color; }
-    try { rules.sanitizeSpec(sp, description); if (sp._qa && sp._qa.length) log('qa rules:', sp._qa.join(' | ')); } catch (e) { log('rules fail', e.message); }
+    try { rules.sanitizeSpec(sp, description, { id }); if (sp._qa && sp._qa.length) log('qa rules:', sp._qa.join(' | ')); } catch (e) { log('rules fail', e.message); }
   }
   fixHands(spec);
   const matching = (Array.isArray(spec.refs_matching) ? spec.refs_matching : []).map(Number).filter(n => Number.isInteger(n));
@@ -651,10 +661,10 @@ ${FIXED ? `LOCKED PARTS (the user locked them — copy these values EXACTLY, des
 Mandatory generic checks on B vs A: (1) every print on B must be a REAL garment print in A — green/brown patches that are really leaves, branches, shadows, hair or a held object in A must be REMOVED from the prints; (2) carried objects (branches, flowers, bags in hand) are not modelled — remove any sword/shield that is not a real sword/shield in A; (3) trousers are not a skirt; wide trousers hide the shoes (footwear.height low); (4) patterns on pale garments are tiny and pastel, never big blobs; (5) nothing overlaps the torso/legs that is not part of the figure. Also rate "hair_match" 0-10 (silhouette, length, curls/texture, fringe). If hair_match < 6 and the hair is long/curly/unusual, set corrected_spec.hair_style "sculpt" (short ordinary hair: always a standard official LEGO short hairpiece, never sculpt) with a hair_sculpt object describing the real hairstyle. Check female bust_size (none|small|medium|large, as in A) and outfit_corset, short sleeves, belt, glasses frame shape, eye colour, bare torso skin consistency. Compare B with A strictly (score 10 only if nothing could be improved; typical good result 7-8). First list every visible detail of A that is MISSING or wrong in B (hair shape/ornaments, face, neckline & exposed skin, trims, sleeves, skirt/stockings/boots, accessories) and add them to corrected_spec prints. Check skin color (must not be the hair color), hair style/color, face print (eyes, lipstick, glasses, beard, masks), torso colors and print, arms/hands, legs. Return JSON {"score":0-10,"problems_uk":"short Ukrainian list","corrected_spec":{...full corrected spec in the same format, or null if score>=9}}.
 ${DESIGN_GUIDE}
 ${SPEC_DOC}` }] }], generationConfig: { responseMimeType: 'application/json', temperature: 0.2 } }, { timeout: 25000, budget: 35000 });
-    verdict = parseJSON(txt(vj));
+    verdict = parseJSON(txt(vj)); if (Array.isArray(verdict)) verdict = verdict.find(o => o && typeof o === 'object' && !Array.isArray(o)) || {}; // model sometimes wraps the object in [ ] — previously the whole correction was silently lost
     if (verdict.corrected_spec && typeof verdict.corrected_spec === 'object') { spec2 = { ...spec, ...verdict.corrected_spec, face: { ...(spec.face || {}), ...(verdict.corrected_spec.face || {}) } };
       if (JSON.stringify(spec2.torso_graphic_box) !== JSON.stringify(spec.torso_graphic_box)) await addGraphic(spec2, cr); else if (spec.torso_graphic_png) spec2.torso_graphic_png = spec.torso_graphic_png;
-      if (!id.is_known_character) { const o = spec2.skin_color; spec2.skin_color = '#F2CD37'; if (spec2.hand_color === o) spec2.hand_color = '#F2CD37'; if (spec2.arm_color === o) spec2.arm_color = '#F2CD37'; } fixHands(spec2); for (const k of ['torso_graphic_box', 'torso_graphic_rect', 'author_touch_uk', 'torso_back_print_svg', 'hips_print_svg', 'accessories_3d', 'arm_print_svg', 'inspection', 'head_part', 'head_part_title', 'head_part_why_uk']) if (spec2[k] == null && spec[k] != null) spec2[k] = spec[k]; }
+      if (!id.is_known_character && !rules.isAnimal(id, description, spec)) { const o = spec2.skin_color; spec2.skin_color = '#F2CD37'; if (spec2.hand_color === o) spec2.hand_color = '#F2CD37'; if (spec2.arm_color === o) spec2.arm_color = '#F2CD37'; } fixHands(spec2); for (const k of ['torso_graphic_box', 'torso_graphic_rect', 'author_touch_uk', 'torso_back_print_svg', 'hips_print_svg', 'accessories_3d', 'arm_print_svg', 'inspection', 'head_part', 'head_part_title', 'head_part_why_uk']) if (spec2[k] == null && spec[k] != null) spec2[k] = spec[k]; }
   } catch (e) { log('verify fail', e.message); }
   if (FIXED) { Object.assign(spec, FIXED); if (spec2) Object.assign(spec2, FIXED); log('locked parts kept', Object.keys(FIXED).join(',')); }
   steps.push(`[${el()}] Готово`);
