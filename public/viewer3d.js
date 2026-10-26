@@ -104,7 +104,21 @@ const shade = hex => '#' + new THREE.Color(hex).multiplyScalar(0.75).getHexStrin
 function RoundedBox(w, h, d, r) { const s = new THREE.Shape(), x = -w / 2, y = -h / 2; s.moveTo(x + r, y); s.lineTo(x + w - r, y); s.quadraticCurveTo(x + w, y, x + w, y + r); s.lineTo(x + w, y + h - r); s.quadraticCurveTo(x + w, y + h, x + w - r, y + h); s.lineTo(x + r, y + h); s.quadraticCurveTo(x, y + h, x, y + h - r); s.lineTo(x, y + r); s.quadraticCurveTo(x, y, x + r, y);
   const g = new THREE.ExtrudeGeometry(s, { depth: d - 2 * Math.min(r, 1), bevelEnabled: true, bevelThickness: Math.min(r, 1), bevelSize: Math.min(r, 1), bevelSegments: 2 }); g.center(); return g; }
 
+// ---- neutral pose guard: the figure is ALWAYS assembled from the neutral (rest) pose; a rebuild wipes every previous mesh, decal and transform ----
+let BASE_CHILDREN = null;
+function resetScene() {
+  if (!BASE_CHILDREN) BASE_CHILDREN = new Set(scene.children);
+  for (const o of [...scene.children]) { if (BASE_CHILDREN.has(o)) continue; scene.remove(o);
+    o.traverse(n => { if (n.geometry) n.geometry.dispose(); const ms = n.material ? (Array.isArray(n.material) ? n.material : [n.material]) : []; ms.forEach(m => { if (m.map) m.map.dispose(); m.dispose(); }); }); }
+  window.PARTS = []; window.CUSTOM_PARTS = []; window.READY = false; (typeof mini !== 'undefined') && (mini.scene = null); window.OFFICIAL_HEAD = false; window.FACE = null; ground.position.set(0, 0, 0);
+  camera.position.set(0, 0, 100); camera.up.set(0, 1, 0); camera.quaternion.identity(); controls.target.set(0, 0, 0); controls.update();
+}
+// snapshot of the standard body parts' world placement (position + rotation) — identical for EVERY figure built from the neutral pose
+window.poseReport = () => { const out = {}; for (const p of window.PARTS || []) { if (!['973', '3818', '3819', '3820', '3815', '3816', '3817'].includes(p.id) || !p.mesh || !p.mesh.isMesh) continue; p.mesh.updateMatrixWorld(true);
+    const q = new THREE.Quaternion(), pos = new THREE.Vector3(); p.mesh.matrixWorld.decompose(pos, q, new THREE.Vector3()); const e = new THREE.Euler().setFromQuaternion(q, 'XYZ'); const k = p.id + '#' + (out[p.id] ? 'b' : 'a');
+    out[k] = [pos.x, pos.y, pos.z, e.x / D, e.y / D, e.z / D].map(v => +v.toFixed(2)); } return out; };
 async function build() {
+  resetScene();
   const S = await getSpec(); const t0 = performance.now();
   const skin = S.skin_color || '#F2CD37', torsoC = S.torso_color || '#C91A09', armC = S.arm_color || torsoC, handC = S.hand_color || skin;
   const hipC = S.hip_color || S.leg_color || '#0055BF', legL = S.leg_color || '#0055BF', legR = S.leg_right_color || legL, hairC = S.hair_color || '#583927';
@@ -116,6 +130,7 @@ async function build() {
   const neckP = NECKACC[S.neck_accessory] || null;
   const legsT = LEGS[S.legs_type] ? S.legs_type : 'standard';
   const dbl = !!S.double_torso; const dy = dbl ? 32 : 0;
+  window.ROLE_SETS = { hair: new Set(hairPart ? hairPart.split('+') : []), hat: new Set(hgParts.map(p => p[0])), neck: new Set(neckP ? [neckP] : []) };
   const names = [...new Set(['3626c', '973', '3818', '3819', '3820', '3815', '3816', '3817', ...(hairPart ? hairPart.split('+') : []), ...hgParts.map(p => p[0]), ...(mold ? [mold] : []), ...(neckP ? [neckP] : []), ...((LEGS[legsT] || []).map(p => p[0]))])];
   const groups = await Promise.all(names.map(n => loadPart(n).catch(e => { console.error(n, e); return null; })));
   const P = Object.fromEntries(names.map((n, i) => [n, groups[i]]));
@@ -161,7 +176,7 @@ async function build() {
   let neckMesh = null;
   if (neckP) neckMesh = place(neckP, plastic(S.neck_accessory_color || '#A0A5A9', S.neck_accessory === 'armor_breastplate' || S.neck_accessory === 'shoulder_pads' ? { metalness: 0.5, roughness: 0.3 } : {}), XF(0, 0, 0));
   // LDraw: y down, -z = front. Flip to three.js (y up, +z front)
-  fig.rotation.x = Math.PI; scene.add(fig); fig.updateMatrixWorld(true);
+  fig.position.set(0, 0, 0); fig.scale.set(1, 1, 1); fig.rotation.set(Math.PI, 0, 0); scene.add(fig); fig.updateMatrixWorld(true);
   if (legsT === 'snake_tail') { (window.CUSTOM_PARTS = window.CUSTOM_PARTS || []).push('Хвіст змії (немає офіційної деталі LDraw)'); // molded serpent tail (Ninjago-style): drops from the hips, curls back into a flat coil that the figure stands on
     const Y0 = 52 + dy, G = 84 + dy; // hips bottom, ground (LDraw y down, -z = front)
     const pts = [V3(0, Y0 - 6, 0), V3(0, Y0 + 6, 0.5), V3(0, Y0 + 16, 3), V3(0, G - 9, 9), V3(0, G - 7, 20), V3(-14, G - 6, 24), V3(-22, G - 5, 10), V3(-18, G - 4, -6), V3(-4, G - 4, -14), V3(12, G - 3.5, -12), V3(20, G - 3, 2), V3(18, G - 2.5, 14)];
@@ -324,6 +339,12 @@ async function build() {
 }
 // ---- parts breakdown panel + isolated mini 3D view ----
 const ROLE = [[/Head|Headdress/, 'Голова'], [/Hair/, 'Волосся'], [/Helmet|Hat|Cap\b|Hood|Cowl|Bandana|Wrap|Beanie/, 'Головний убір'], [/Torso/, 'Торс'], [/Arm/, 'Рука'], [/Hand/, 'Кисть'], [/Hips|Leg|Skirt|Slope/, 'Низ / ноги'], [/Cape|Armour|Vest|Jacket|Lifevest|Epaulette|Shell|Breastplate|Neck/, 'Плащ / броня'], [/Sword|Shield/, 'Аксесуар']];
+// role of a part is decided by its ID (never by the free-text title: "Minifig Armour" must not become an arm)
+const ROLE_IDS = { head: /^3626|^12607$|^18955$/, torso: /^973$/, arm: /^381[89]$/, hand: /^3820$/, legs: /^(3815|3816|3817|41879a|51345|3678b|u9209c01|36036|24068|19859|custom-snake-tail)$/ };
+function roleOf(p, hairIds, hatIds, neckIds) {
+  const id = String(p.id); if (ROLE_IDS.head.test(id)) return 'Голова'; if (id === 'custom-hair' || id === 'custom-hair-sculpt' || hairIds.has(id)) return 'Волосся'; if (hatIds.has(id)) return 'Головний убір'; if (neckIds.has(id)) return 'Плащ / броня';
+  if (ROLE_IDS.torso.test(id)) return 'Торс'; if (ROLE_IDS.arm.test(id)) return 'Рука'; if (ROLE_IDS.hand.test(id)) return 'Кисть'; if (ROLE_IDS.legs.test(id)) return 'Низ / ноги';
+  if (/^(3847|18031|3846|3876|2586)$/.test(id) || /^custom-(handbag|headband|backpack)/.test(id)) return 'Аксесуар'; return null; }
 const mini = { r: null, scene: null, cam: null, ctl: null };
 function showMini(p) {
   const cv = $('mini'); if (!mini.r) { mini.r = new THREE.WebGLRenderer({ canvas: cv, antialias: true, preserveDrawingBuffer: true }); mini.r.setPixelRatio(Math.min(2, devicePixelRatio)); mini.r.toneMapping = THREE.NeutralToneMapping; mini.r.outputColorSpace = THREE.SRGBColorSpace;
@@ -337,22 +358,30 @@ function showMini(p) {
   mini.ctl.target.copy(c); mini.cam.position.copy(c).add(new THREE.Vector3(0.7, 0.35, 1).normalize().multiplyScalar(r * 1.9)); mini.ctl.update(); mini.scene = sc;
   $('minihdr').innerHTML = `<b>${p.role}</b> · ${p.id} — ${p.title || ''} <span style="color:#777">(обертайте мишею; ззаду видно приховані принти)</span>`;
 }
-const LOCK_ID = params.get('id') || ''; let LOCKS = new Set();
-try { const o = JSON.parse(localStorage.getItem('lego_locks') || '{}'); if (o.id === LOCK_ID) LOCKS = new Set(o.roles || []); } catch {}
-function saveLocks() { const v = { id: LOCK_ID, roles: [...LOCKS] }; try { localStorage.setItem('lego_locks', JSON.stringify(v)); } catch {} try { parent.postMessage({ lego_locks: v }, location.origin); } catch {} }
+const LOCK_ID = params.get('id') || ''; let LOCKS = new Set((params.get('locks') || '').split(',').filter(Boolean));
+// the parent page owns the lock state (survives regeneration); we only report changes. No localStorage: a stale id used to leave invisible locks on a NEW figure.
+function saveLocks() { const v = { id: LOCK_ID, roles: [...LOCKS] }; try { parent.postMessage({ lego_locks: v }, location.origin); } catch {} }
+const paintLocks = () => $('plist').querySelectorAll('.lk').forEach(x => { const on = LOCKS.has(x.dataset.r); x.textContent = on ? '🔒' : '🔓'; x.setAttribute('aria-pressed', on); x.title = on ? 'Деталь зафіксована — зняти замочок' : 'Зафіксувати деталь при повторній генерації'; });
+addEventListener('message', e => { if (e.origin !== location.origin || !e.data || !Array.isArray(e.data.set_locks)) return; LOCKS = new Set(e.data.set_locks); paintLocks(); });
 async function buildPanel() {
-  const P = window.PARTS || []; await Promise.all(P.map(async p => { if (!p.title) { try { p.title = (await (await fetch('/ldraw/lib/parts/' + p.id + '.dat')).text()).split('\n')[0].replace(/^0\s+~?/, '').trim(); } catch { p.title = ''; } } const r = ROLE.find(([re]) => re.test(p.title)); p.role = r ? r[1] : 'Деталь'; }));
+  const P = window.PARTS || []; await Promise.all(P.map(async p => { if (!p.title) { try { p.title = (await (await fetch('/ldraw/lib/parts/' + p.id + '.dat')).text()).split('\n')[0].replace(/^0\s+~?/, '').trim(); } catch { p.title = ''; } } const rs = window.ROLE_SETS || { hair: new Set(), hat: new Set(), neck: new Set() }; const byId = roleOf(p, rs.hair, rs.hat, rs.neck); const r = ROLE.find(([re]) => re.test(p.title)); p.role = byId || (r ? r[1] : 'Деталь'); }));
   const order = ['Голова', 'Волосся', 'Головний убір', 'Плащ / броня', 'Торс', 'Рука', 'Кисть', 'Низ / ноги', 'Аксесуар', 'Деталь']; P.sort((a, b) => order.indexOf(a.role) - order.indexOf(b.role));
   const bl = id => id.startsWith('custom') ? '' : `<a target="_blank" href="https://www.bricklink.com/v2/catalog/catalogitem.page?P=${encodeURIComponent(id.replace(/^3626[bc]p.*/, '3626c'))}">BrickLink</a> · <a target="_blank" href="https://library.ldraw.org/parts/list?s=${encodeURIComponent(id)}">LDraw</a>`;
-  $('plist').innerHTML = `<b>Деталі фігурки (${P.length})</b><div style="color:#777;font-size:.85em">🔒 — зафіксувати деталь (колір і принт) для «Згенерувати ще раз»</div>` + P.map((p, i) => `<div class="row" data-i="${i}"><span class="sw" style="background:${p.color}"></span><button class="lk" data-r="${p.role}" title="Зафіксувати деталь при повторній генерації" style="border:0;background:none;cursor:pointer;font-size:16px">${LOCKS.has(p.role) ? '🔒' : '🔓'}</button><div><b>${p.role}</b> · <code>${p.id}</code><br><span style="color:#555">${p.title}</span><br><span style="color:#888">колір ${p.color}</span> ${bl(p.id)}</div></div>`).join('')
+  $('plist').innerHTML = `<b>Деталі фігурки (${P.length})</b><div style="color:#777;font-size:.85em">🔒 — зафіксувати деталь (колір і принт): «Згенерувати ще раз» її не чіпатиме, усе інше буде новим</div>` + P.map((p, i) => `<div class="row" data-i="${i}"><span class="sw" style="background:${p.color}"></span><button class="lk" data-r="${p.role}" title="Зафіксувати деталь при повторній генерації" style="border:0;background:none;cursor:pointer;font-size:16px">${LOCKS.has(p.role) ? '🔒' : '🔓'}</button><div><b>${p.role}</b> · <code>${p.id}</code><br><span style="color:#555">${p.title}</span><br><span style="color:#888">колір ${p.color}</span> ${bl(p.id)}</div></div>`).join('')
     + ((window.CUSTOM_PARTS || []).length ? `<div style="color:#a00;margin-top:6px">Декоративні 3D-елементи без офіційної деталі: ${window.CUSTOM_PARTS.join(', ')}</div>` : '') + `<div style="color:#777;margin:6px 0">Принти — друк на деталях; золото/срібло — металеві чорнила.</div>`;
-  $('plist').querySelectorAll('.lk').forEach(b => b.onclick = e => { e.stopPropagation(); const r = b.dataset.r; LOCKS.has(r) ? LOCKS.delete(r) : LOCKS.add(r); saveLocks(); $('plist').querySelectorAll('.lk').forEach(x => x.textContent = LOCKS.has(x.dataset.r) ? '🔒' : '🔓'); });
+  $('plist').querySelectorAll('.lk').forEach(b => b.onclick = e => { e.stopPropagation(); const r = b.dataset.r; LOCKS.has(r) ? LOCKS.delete(r) : LOCKS.add(r); saveLocks(); paintLocks(); });
+  paintLocks(); saveLocks();
   $('plist').querySelectorAll('.row').forEach(el => el.onclick = e => { if (e.target.tagName === 'A' || e.target.classList.contains('lk')) return; $('plist').querySelectorAll('.row').forEach(x => x.classList.remove('sel')); el.classList.add('sel'); showMini(P[+el.dataset.i]); });
   const t = P.find(p => p.role === 'Торс'); if (t) { showMini(t); $('plist').querySelector(`.row[data-i="${P.indexOf(t)}"]`)?.classList.add('sel'); }
 }
 document.querySelectorAll('[data-v]').forEach(b => b.onclick = () => setView(b.dataset.v));
 $('rot').onclick = () => { controls.autoRotate = !controls.autoRotate; $('rot').classList.toggle('on', controls.autoRotate); };
 controls.autoRotateSpeed = 2.5; controls.autoRotate = params.get('rotate') === '1';
-$('png').onclick = () => { renderer.render(scene, camera); const a = document.createElement('a'); a.download = 'lego-minifig-3d.png'; a.href = canvas.toDataURL('image/png'); a.click(); };
+$('png').onclick = () => window.savePng();
 (function loop() { requestAnimationFrame(loop); controls.update(); renderer.render(scene, camera); })();
-build().catch(e => { $('msg').textContent = 'Помилка 3D: ' + e.message; console.error(e); window.READY = 'error'; });
+let building = Promise.resolve();
+const doBuild = () => (building = building.then(() => build()).catch(e => { $('msg').textContent = 'Помилка 3D: ' + e.message; console.error(e); window.READY = 'error'; }));
+// in-place rebuild (used by tests and by the page when a new spec arrives): always from the neutral pose, never from the previous figure's state
+window.rebuild = spec => { window.MINIFIG_SPEC = JSON.parse(JSON.stringify(spec || {})); $('msg').textContent = 'Збираю фігурку…'; return doBuild(); };
+window.savePng = () => { renderer.render(scene, camera); const a = document.createElement('a'); a.download = 'lego-minifig-3d.png'; a.href = canvas.toDataURL('image/png'); a.click(); };
+doBuild();

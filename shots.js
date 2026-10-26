@@ -7,7 +7,7 @@ const { chromium } = require('playwright'); const fs = require('fs');
   const p = await b.newPage({ viewport: { width: 800, height: 900 } });
   p.on('pageerror', e => console.log('pageerror', e.message));
   await p.addInitScript(s => { window.MINIFIG_SPEC = s; }, spec);
-  const t = Date.now(); await p.goto('http://localhost:8787/viewer3d.html');
+  const t = Date.now(); await p.goto((process.env.BASE||'http://localhost:8787')+'/viewer3d.html');
   await p.waitForFunction(() => window.READY, null, { timeout: 60000 });
   console.log('ready', Date.now() - t, 'ms build', await p.evaluate(() => window.BUILD_MS), await p.evaluate(() => JSON.stringify(window.DEBUG || null)));
   for (const v of views.split(',')) { await p.evaluate(v => window.setView(v), v); await p.waitForTimeout(600);
