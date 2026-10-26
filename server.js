@@ -42,7 +42,7 @@ const log = (...a) => logger.info({ evt: 'app' }, a.map(x => typeof x === 'strin
 async function callModel(m, body, timeout) {
   const t0 = Date.now();
   try {
-    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent`, {
+    const r = await fetch(`${process.env.GEMINI_API_BASE || 'https://generativelanguage.googleapis.com/v1beta'}/models/${m}:generateContent`, {
       method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': KEY }, body: JSON.stringify(body), signal: AbortSignal.timeout(timeout) });
     const j = await r.json().catch(() => ({}));
     if (r.ok && j.candidates?.length) { health.set(m, { until: 0, lat: Date.now() - t0 }); log('ok', m, Date.now() - t0, 'ms'); return j; }
@@ -467,22 +467,27 @@ function addGraphic(sp, cr) {
 const SPEC_MODELS = (process.env.SPEC_MODELS || 'gemini-flash-latest,gemini-3.5-flash,gemini-3-flash-preview').split(',').concat(TEXT_MODELS.filter(m => !/^(gemini-flash-latest|gemini-3.5-flash|gemini-3-flash-preview)$/.test(m)));
 // official LEGO printed heads (LDraw 3626bp*/3626cp*) catalog → Gemini picks the closest face print
 let FACE_CAT = []; try { FACE_CAT = JSON.parse(require('fs').readFileSync(__dirname + '/faces/catalog.json', 'utf8')); } catch (e) { log('no face catalog', e.message); }
-async function pickFace(spec, cr) {
+const facesafe = require('./lib/facesafe'), regen = require('./lib/regen');
+// Official printed head: ONLY from the curated safe subset (lib/facesafe.js), never repeating `exclude` (regeneration). Gemini ranks the top candidates;
+// if nothing safe fits the subject (gender/expression/beard/glasses) => null => the clean composite face is used instead ("less similar but pleasant").
+async function pickFace(spec, cr, { exclude = [], identity = '' } = {}) {
   if (!FACE_CAT.length || spec.hair_style === 'bandana_tails' || (spec.head_mold && spec.head_mold !== 'standard') || (spec.face && spec.face.mask && spec.face.mask !== 'none' && (spec.face.mask.type || spec.face.mask) !== 'none') || (spec.face && spec.face.eye_mask)) return null;
-  const list = FACE_CAT.map(c => `${c.part}: ${c.title.replace(/^Minifig Head with /, '').replace(/ Pattern( \(Hollow Stud\))?$/, '')}`).join('\n');
-  const j = await gem(TEXT_MODELS, { contents: [{ parts: [img(cr.data, cr.mime), { text: `Pick the official LEGO printed minifigure head whose FACE PRINT best matches the person/character in the image: gender (eyelashes/lips = female), age (wrinkles/grey brows = old), expression, facial hair (beard/moustache/stubble), glasses/sunglasses (only if the subject wears them), freckles. Current face spec: ${JSON.stringify(spec.face || {})}.
-Catalog (part: description):
+  const face = spec.face || {}, ctx = { identity, expression: face.expression }, ex = new Set(exclude.filter(Boolean));
+  const cand = facesafe.safeCatalog(FACE_CAT, ctx).filter(c => !ex.has(c.part)).map(c => ({ c, s: facesafe.headFit(c, face) })).filter(x => x.s > -3).sort((a, b) => b.s - a.s).slice(0, 40).map(x => x.c);
+  if (!cand.length) return null;
+  let hit = null, why = null;
+  try {
+    const list = cand.map(c => `${c.part}: ${c.title.replace(/^Minifig Head with /, '').replace(/ Pattern( \(Hollow Stud\))?$/, '')}`).join('\n');
+    const j = await gem(TEXT_MODELS, { contents: [{ parts: [img(cr.data, cr.mime), { text: `Pick the official LEGO printed minifigure head whose FACE PRINT best matches the person/character in the image: gender (eyelashes/lips = female), age (wrinkles/grey brows = old), expression, facial hair (beard/moustache/stubble), glasses/sunglasses (only if the subject wears them), freckles. Current face spec: ${JSON.stringify(face)}.
+Catalog (part: description) — already filtered to nice, safe prints:
 ${list}
-Return JSON {"head_part":"part id from the catalog","why_uk":"коротко чому"}. EXPRESSION IS A HARD RULE: neutral / pursed lips / duck lips / serious subject => a closed-mouth NON-smiling face (never smile, grin or open mouth); lipstick only if visible. Prefer simple, clean faces; do NOT pick glasses/beards/scars if the subject doesn't have them.` }] }], generationConfig: { responseMimeType: 'application/json', temperature: 0.1 } }, { timeout: 15000, budget: 20000 });
-  const r = parseJSON(txt(j)); let hit = FACE_CAT.find(c => c.part === String(r.head_part || '').trim().toLowerCase());
-  const SM = /Smil|Grin|Open Mouth|Laugh|Teeth|Tongue/i, ex = String(spec.face?.expression || '').toLowerCase();
-  if (hit && /neutral|pursed|duck|serious|smirk/.test(ex) && SM.test(hit.title)) { // expression rule is hard: no smiles for neutral faces
-    const fem = String(spec.face?.gender || '').toLowerCase() === 'female', gl = spec.face?.glasses && spec.face.glasses !== 'none';
-    const alt = FACE_CAT.filter(c => !SM.test(c.title) && (fem ? /Female|Eyelashes|Lips/i.test(c.title) : !/Female|Eyelashes/i.test(c.title)) && !/Beard|Moustache|Stubble|Scar|Sunglasses|Mask|Tear/i.test(c.title) && (gl ? true : !/Glasses/i.test(c.title)));
-    const lip = !!spec.face?.lipstick, sc = t => (/Closed Mouth|Neutral|Smirk/i.test(t) ? 2 : 0) + (/Lips|Lipstick/i.test(t) ? (lip ? 2 : -2) : 0);
-    const best = alt.sort((a, b) => (sc(b.title) - sc(a.title)) || a.title.length - b.title.length)[0];
-    log('pickFace: smile rejected for neutral face', hit.part, '->', best && best.part); hit = best || null; if (hit) r.why_uk = 'Нейтральний вираз без усмішки (як на фото).'; }
-  return hit ? { part: hit.part, title: hit.title, why_uk: r.why_uk } : null;
+Return JSON {"head_parts":["best part id","2nd best","3rd best"],"why_uk":"коротко чому"} (ids from the catalog only). EXPRESSION IS A HARD RULE: neutral / pursed lips / duck lips / serious subject => a closed-mouth NON-smiling face (never smile, grin or open mouth); lipstick only if visible. Prefer simple, clean, friendly faces; do NOT pick glasses/beards/scars if the subject doesn't have them.` }] }], generationConfig: { responseMimeType: 'application/json', temperature: ex.size ? 0.5 : 0.1 } }, { timeout: 15000, budget: 20000 });
+    const r = parseJSON(txt(j)); why = r.why_uk; const ids = [].concat(r.head_parts || r.head_part || []).map(x => String(x).trim().toLowerCase());
+    hit = ids.map(id => cand.find(c => c.part === id)).find(Boolean) || null;
+  } catch (e) { log('pickFace gemini', String(e.message).slice(0, 80)); }
+  if (hit && facesafe.headFit(hit, face) < -2) hit = null; // Gemini's choice conflicts with the subject (smile on a neutral face, glasses nobody wears ...)
+  if (!hit) { hit = facesafe.bestHead(FACE_CAT, face, ctx, [...ex]); if (hit) why = 'Підібрано найближчий безпечний (перевірений) варіант обличчя.'; }
+  return hit ? { part: hit.part, title: hit.title, why_uk: why } : null;
 }
 
 const DESIGN_GUIDE = `THINK LIKE AN OFFICIAL LEGO MINIFIGURE DESIGNER (do this in "design" before writing any SVG):
@@ -569,16 +574,14 @@ function postRules(sp, description) { if (!sp) return sp; const D = JSON.stringi
     sp.hips_print_svg = `<rect x='0' y='0' width='100' height='20' fill='${wb}'/><rect x='0' y='20' width='100' height='80' fill='${bc}'/>`; }
   if (sp.bare_torso === true) { const skinish = c => /^#(f6d7b3|d09168|e4cd9e|f3e6e2|ffc995|cc8e69|aa7d55|f2cd37|ffe1b5|fcc39e)$/i.test(c || ''); if (skinish(sp.leg_color)) sp.leg_color = sp.skin_color; if (skinish(sp.leg_right_color)) sp.leg_right_color = sp.skin_color; if (skinish(sp.hip_color)) sp.hip_color = sp.skin_color; }
   return sp; }
-const LOCKMAP = { 'Голова': ['face', 'head_part', 'head_part_title', 'head_part_why_uk', 'skin_color', 'head_mold'], 'Волосся': ['hair_style', 'hair_color', 'hair_secondary_color'], 'Головний убір': ['headgear', 'headgear_color'],
-  'Плащ / броня': ['neck_accessory', 'neck_accessory_color'], 'Торс': ['torso_color', 'torso_print_svg', 'torso_back_print_svg', 'collar', 'collar_color', 'torso_graphic_png', 'torso_graphic_box', 'double_torso', 'torso2'],
-  'Рука': ['arm_color', 'arm_print_svg'], 'Кисть': ['hand_color', 'hands_are_gloves'], 'Низ / ноги': ['legs_type', 'hip_color', 'leg_color', 'leg_right_color', 'legs_print_svg', 'hips_print_svg', 'skirt_color'], 'Аксесуар': ['accessories_3d'] };
-function lockedFields(lock_from, roles) {
-  if (!lock_from || !/^[0-9]+-[a-z0-9]{4}$/.test(lock_from) || !Array.isArray(roles) || !roles.length) return null;
-  let old; try { old = JSON.parse(require('fs').readFileSync(__dirname + '/out/' + lock_from + '.json', 'utf8')); } catch { return null; }
-  const f = {}; for (const r of roles) for (const k of (LOCKMAP[r] || [])) if (old[k] !== undefined) f[k] = old[k]; return Object.keys(f).length ? f : null;
-}
-app.post('/api/generate', wrap(async ({ image, mime, crop, subject, description, lock_from, locked_roles }, stage = () => {}) => {
-  const FIXED = lockedFields(lock_from, locked_roles);
+// regeneration state (what was shown before, locks) -> lib/regen.js. Same crop => the previous figure of this crop is remembered (works even without any lock)
+const recentByCrop = new Map();
+app.post('/api/generate', wrap(async ({ image, mime, crop, subject, description, lock_from, locked_roles, prev_id }, stage = () => {}) => {
+  const outDir0 = __dirname + '/out', cropKey = hash(crop || image || '');
+  const lockSrc = regen.loadSpec(lock_from, outDir0), LOCKED = lockSrc ? regen.validRoles(locked_roles) : [];
+  const PREV_ID = regen.ID_RE.test(lock_from || '') && lockSrc ? lock_from : regen.ID_RE.test(prev_id || '') && regen.loadSpec(prev_id, outDir0) ? prev_id : recentByCrop.get(cropKey) || null;
+  const PREV = PREV_ID ? regen.loadSpec(PREV_ID, outDir0) : null, REGEN = !!PREV, RND = REGEN ? Math.random : null;
+  const FIXED = lockSrc ? regen.pickLocked(lockSrc, LOCKED) : null;
   const T0 = Date.now(); const el = () => ((Date.now() - T0) / 1000).toFixed(1) + ' с';
   const cr = crop ? { data: crop, mime: 'image/jpeg' } : { data: image, mime: mime || 'image/jpeg' };
   const steps = []; const step = m => { steps.push(`[${el()}] ${m}`); stage(m); };
@@ -600,8 +603,8 @@ ${refs.length ? `First decide which references show the SAME character in the SA
 First fill "inspection" region by region (look carefully at IMAGE A), then design an official-style LEGO minifigure of the subject in IMAGE A that reproduces EVERY inspected detail as prints: skin-colored neckline/shoulder areas, trims, lace, sleeve shapes on arms, skirt hems, stockings/boot tops with skin gaps, hair ornaments as accessories_3d. Prints must be detailed (15-40 shapes on torso). Be careful: hair color is NOT skin color (e.g. blue hair + pale skin => skin pale, hair blue). Pick the hair_style closest to the hair silhouette. Encode clothing details into torso_print_svg and legs_print_svg.
 ${DESIGN_GUIDE}
 ${SPEC_DOC}
-${FIXED ? `LOCKED PARTS (the user locked them — copy these values EXACTLY, design everything else to fit them): ${JSON.stringify({ ...FIXED, torso_graphic_png: undefined }).slice(0, 6000)}\n` : ''}Return ONLY the JSON, plus "refs_matching":[integers only, e.g. [1,3]] and "checklist":["4-6 key visual features to verify"].` });
-  const sj = await gem(TEXT_MODELS, { contents: [{ parts }], generationConfig: { responseMimeType: 'application/json', temperature: 0.15, seed: 4242 } }, { timeout: 40000, budget: 55000 });
+${REGEN ? regen.regenNote(PREV, LOCKED) : ''}${FIXED ? `LOCKED PARTS (the user locked them — copy these values EXACTLY, design everything else to fit them): ${JSON.stringify({ ...FIXED, torso_graphic_png: undefined }).slice(0, 6000)}\n` : ''}Return ONLY the JSON, plus "refs_matching":[integers only, e.g. [1,3]] and "checklist":["4-6 key visual features to verify"].` });
+  const sj = await gem(TEXT_MODELS, { contents: [{ parts }], generationConfig: { responseMimeType: 'application/json', temperature: REGEN ? 0.75 : 0.15, seed: REGEN ? Math.floor(Math.random() * 1e9) : 4242 } }, { timeout: 40000, budget: 55000 });
   let spec = parseJSON(txt(sj)); if (Array.isArray(spec)) spec = spec.find(o => o && typeof o === 'object' && !Array.isArray(o)) || {};
   if (!id.is_known_character && !rules.isAnimal(id, description, spec)) { // ordinary real people → classic LEGO yellow skin
     const old = spec.skin_color; spec.skin_color = '#F2CD37'; if (!spec.hand_color || spec.hand_color === old) spec.hand_color = '#F2CD37'; if (spec.arm_color === old) spec.arm_color = '#F2CD37'; }
@@ -643,15 +646,16 @@ ${FIXED ? `LOCKED PARTS (the user locked them — copy these values EXACTLY, des
     sp.accessories_3d = acc.filter(a => a && !/glass|goggle|^cap$/.test(a.type || ''));
     if (['cap', 'hood', 'helmet_knight'].includes(sp.hair_style) && (!sp.headgear || sp.headgear === 'none')) { sp.headgear = sp.hair_style; sp.headgear_color = sp.headgear_color || sp.hair_color; }
     try { rules.sanitizeSpec(sp, description, { id }); if (sp._qa && sp._qa.length) log('qa rules:', sp._qa.join(' | ')); } catch (e) { log('rules fail', e.message); }
+    try { if (sp.face && !LOCKED.includes('Голова')) { const fr = facesafe.sanitizeFace(sp.face, { skin: sp.skin_color }); sp.face = fr.face; sp._face_score = fr.score; if (fr.fixes.length) { sp._qa = [...(sp._qa || []), 'face: ' + fr.fixes.join('; ') + ' (score ' + fr.score + ')']; log('face sanity', fr.score, fr.fixes.join('; ')); } } } catch (e) { log('face sanity fail', e.message); }
   }
-  fixHands(spec);
+  fixHands(spec); if (FIXED) { Object.assign(spec, FIXED); regen.reconcile(spec); }
   const matching = (Array.isArray(spec.refs_matching) ? spec.refs_matching : []).map(Number).filter(n => Number.isInteger(n));
   const usedRefs = refs.filter((r, i) => matching.includes(i + 1)).map(({ b, ...r }) => r);
   log('refs', refs.length, 'matching', JSON.stringify(spec.refs_matching), 'wiki', id.fandom_wiki, id.fandom_wiki_alternatives);
   step('4/5 Вирізаю принт з фото й рендерю…');
   await addGraphic(spec, cr);
   // ordinary people get a COMPOSITE face (official-style layers: eyes/lashes, brows, mouth/lips, glasses) — whole official heads only for known characters
-  if (id.is_known_character && !(spec.face && spec.face.eye_color)) try { const fp = await pickFace(spec, cr); if (fp) { spec.head_part = fp.part; spec.head_part_title = fp.title; spec.head_part_why_uk = fp.why_uk; } } catch (e) { log('pickFace', e.message); }
+  if (id.is_known_character && !(spec.face && spec.face.eye_color) && !LOCKED.includes('Голова')) try { const fp = await pickFace(spec, cr, { exclude: REGEN ? [PREV.head_part] : [], identity: [id.identity, id.franchise, id.character_name].filter(Boolean).join(' ') }); if (fp) { spec.head_part = fp.part; spec.head_part_title = fp.title; spec.head_part_why_uk = fp.why_uk; } } catch (e) { log('pickFace', e.message); }
   let r1 = minifig.renderPng(spec);
   step('5/5 Gemini перевіряє рендер і виправляє специфікацію…');
   let final = r1, spec2 = null, verdict = null;
@@ -666,15 +670,21 @@ ${SPEC_DOC}` }] }], generationConfig: { responseMimeType: 'application/json', te
       if (JSON.stringify(spec2.torso_graphic_box) !== JSON.stringify(spec.torso_graphic_box)) await addGraphic(spec2, cr); else if (spec.torso_graphic_png) spec2.torso_graphic_png = spec.torso_graphic_png;
       if (!id.is_known_character && !rules.isAnimal(id, description, spec)) { const o = spec2.skin_color; spec2.skin_color = '#F2CD37'; if (spec2.hand_color === o) spec2.hand_color = '#F2CD37'; if (spec2.arm_color === o) spec2.arm_color = '#F2CD37'; } fixHands(spec2); for (const k of ['torso_graphic_box', 'torso_graphic_rect', 'author_touch_uk', 'torso_back_print_svg', 'hips_print_svg', 'accessories_3d', 'arm_print_svg', 'inspection', 'head_part', 'head_part_title', 'head_part_why_uk']) if (spec2[k] == null && spec[k] != null) spec2[k] = spec[k]; }
   } catch (e) { log('verify fail', e.message); }
-  if (FIXED) { Object.assign(spec, FIXED); if (spec2) Object.assign(spec2, FIXED); log('locked parts kept', Object.keys(FIXED).join(',')); }
+  // final guard: an unsafe official head (not in the curated list) is never shown unless the user locked it
+  for (const sp of [spec, spec2].filter(Boolean)) if (sp.head_part && !LOCKED.includes('Голова') && !facesafe.isSafeHead({ part: sp.head_part, title: sp.head_part_title || '' }, { identity: [id.identity, id.franchise].join(' '), expression: sp.face && sp.face.expression })) { log('unsafe head dropped', sp.head_part); delete sp.head_part; delete sp.head_part_title; delete sp.head_part_why_uk; }
+  const fin = spec2 || spec; let rg = null;
+  if (REGEN) { try { rg = regen.diversify(fin, PREV, LOCKED, { rnd: RND, catalog: FACE_CAT, identity: [id.identity, id.franchise].join(' ') }); if (rg.notes.length) { log('regen diversify', rg.notes.join(' | ')); fin._qa = [...(fin._qa || []), ...rg.notes.map(n => 'regen: ' + n)]; } } catch (e) { log('diversify fail', e.message); } }
+  if (FIXED) { Object.assign(spec, FIXED); if (spec2) Object.assign(spec2, FIXED); regen.reconcile(spec); if (spec2) regen.reconcile(spec2); log('locked parts kept', Object.keys(FIXED).join(',')); }
+  fin._regen_of = PREV_ID || undefined; fin._locked_roles = LOCKED.length && FIXED ? LOCKED : undefined; fin._prev_head = undefined;
+  try { final = minifig.renderPng(fin); } catch (e) { log('final render', e.message); }
   steps.push(`[${el()}] Готово`);
   const fs = require('fs'); const outDir = __dirname + '/out'; fs.mkdirSync(outDir, { recursive: true });
-  const fname = Date.now() + '-' + Math.random().toString(36).slice(2, 6); fs.writeFileSync(`${outDir}/${fname}.png`, final.png);
+  const fname = Date.now() + '-' + Math.random().toString(36).slice(2, 6); fs.writeFileSync(`${outDir}/${fname}.png`, final.png); recentByCrop.set(cropKey, fname); if (recentByCrop.size > 500) recentByCrop.delete(recentByCrop.keys().next().value);
   try { const fs3 = { ...(spec2 || spec) }; fs3.textures = minifig.textures(fs3); fs.writeFileSync(`${outDir}/${fname}.json`, JSON.stringify(fs3)); } catch (e) { log('tex fail', e.message); }
   return { image: final.png.toString('base64'), mime: 'image/png', first_render: spec2 ? r1.png.toString('base64') : null, source: 'Шаблонний рендер (пропорції класичної мініфігурки) + специфікація Gemini',
     spec: { ...(spec2 || spec), torso_graphic_png: (spec2 || spec).torso_graphic_png ? '(PNG з фото)' : undefined }, verdict, author_touch_uk: (spec2 || spec).author_touch_uk, identity: (spec2 || spec).identity || id.identity, identity_confirmed: usedRefs.length > 0, checklist: spec.checklist, references: usedRefs, references_rejected: refs.filter((r, i) => !matching.includes(i + 1)).map(({ b, ...r }) => r),
     appearance_uk: { 'Шкіра': (spec2 || spec).skin_color, 'Зачіска': `${(spec2 || spec).hair_style} ${(spec2 || spec).hair_color}`, 'Тулуб': (spec2 || spec).torso_color, 'Руки': `${(spec2 || spec).arm_color} / кисті ${(spec2 || spec).hand_color}`, 'Ноги': (spec2 || spec).leg_color, 'Аксесуари': (spec2 || spec).accessories_uk, 'Авторський штрих': (spec2 || spec).author_touch_uk, 'Офіційний друк обличчя': (spec2 || spec).head_part ? `${(spec2 || spec).head_part} — ${(spec2 || spec).head_part_title}` : 'намальоване обличчя (запасний варіант)', 'Примітки': (spec2 || spec).notes_uk },
-    steps, seconds: +((Date.now() - T0) / 1000).toFixed(1), score: verdict?.score ?? null, qa_rules: (spec2 || spec)._qa || [], file: `out/${fname}.png`, viewer3d: `/viewer3d.html?id=${fname}` };
+    steps, seconds: +((Date.now() - T0) / 1000).toFixed(1), score: verdict?.score ?? null, regenerated: REGEN, regen_changed: rg ? rg.changed : [], regen_exempt: rg ? rg.exempt : [], locked_roles: LOCKED, face_score: (spec2 || spec)._face_score ?? null, qa_rules: (spec2 || spec)._qa || [], file: `out/${fname}.png`, viewer3d: `/viewer3d.html?id=${fname}` };
 }));
 
 app.get('/healthz', (req, res) => res.send('ok'));
