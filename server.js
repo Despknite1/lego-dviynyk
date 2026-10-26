@@ -19,7 +19,8 @@ app.use('/api', express.json({ limit: '15mb' }));
 app.use(['/api/detect', '/api/describe', '/api/search', '/api/generate', '/api/generate_ai'], require('./lib/sec/upload').middleware(['image', 'crop']));
 app.use(express.static(__dirname + '/public'));
 app.use('/vendor/three', express.static(__dirname + '/node_modules/three', { maxAge: '7d' }));
-app.use('/out', express.static(__dirname + '/out', { maxAge: '1h' }));
+const OUT_DIR = process.env.OUT_DIR || __dirname + '/out'; // tests use a temp dir
+app.use('/out', express.static(OUT_DIR, { maxAge: '1h' }));
 const ldpack = require('./lib/ldpack');
 app.use('/ldraw/lib', (req, res, next) => { req.url = req.url.toLowerCase(); next(); }, express.static(process.env.LDRAW_DIR || '/workspace/ldraw/ldraw', { maxAge: '7d', fallthrough: false }));
 app.get('/ldraw/packed/:part.mpd', (req, res) => { try { res.type('text/plain').set('Cache-Control', 'public, max-age=604800').send(ldpack.pack(req.params.part)); } catch (e) { res.status(404).send(e.message); } });
@@ -577,7 +578,7 @@ function postRules(sp, description) { if (!sp) return sp; const D = JSON.stringi
 // regeneration state (what was shown before, locks) -> lib/regen.js. Same crop => the previous figure of this crop is remembered (works even without any lock)
 const recentByCrop = new Map();
 app.post('/api/generate', wrap(async ({ image, mime, crop, subject, description, lock_from, locked_roles, prev_id }, stage = () => {}) => {
-  const outDir0 = __dirname + '/out', cropKey = hash(crop || image || '');
+  const outDir0 = OUT_DIR, cropKey = hash(crop || image || '');
   const lockSrc = regen.loadSpec(lock_from, outDir0), LOCKED = lockSrc ? regen.validRoles(locked_roles) : [];
   const PREV_ID = regen.ID_RE.test(lock_from || '') && lockSrc ? lock_from : regen.ID_RE.test(prev_id || '') && regen.loadSpec(prev_id, outDir0) ? prev_id : recentByCrop.get(cropKey) || null;
   const PREV = PREV_ID ? regen.loadSpec(PREV_ID, outDir0) : null, REGEN = !!PREV, RND = REGEN ? Math.random : null;
@@ -678,7 +679,7 @@ ${SPEC_DOC}` }] }], generationConfig: { responseMimeType: 'application/json', te
   fin._regen_of = PREV_ID || undefined; fin._locked_roles = LOCKED.length && FIXED ? LOCKED : undefined; fin._prev_head = undefined;
   try { final = minifig.renderPng(fin); } catch (e) { log('final render', e.message); }
   steps.push(`[${el()}] Готово`);
-  const fs = require('fs'); const outDir = __dirname + '/out'; fs.mkdirSync(outDir, { recursive: true });
+  const fs = require('fs'); const outDir = OUT_DIR; fs.mkdirSync(outDir, { recursive: true });
   const fname = Date.now() + '-' + Math.random().toString(36).slice(2, 6); fs.writeFileSync(`${outDir}/${fname}.png`, final.png); recentByCrop.set(cropKey, fname); if (recentByCrop.size > 500) recentByCrop.delete(recentByCrop.keys().next().value);
   try { const fs3 = { ...(spec2 || spec) }; fs3.textures = minifig.textures(fs3); fs.writeFileSync(`${outDir}/${fname}.json`, JSON.stringify(fs3)); } catch (e) { log('tex fail', e.message); }
   return { image: final.png.toString('base64'), mime: 'image/png', first_render: spec2 ? r1.png.toString('base64') : null, source: 'Шаблонний рендер (пропорції класичної мініфігурки) + специфікація Gemini',
