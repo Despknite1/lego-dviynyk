@@ -1,0 +1,25 @@
+// node tests/rules.test.js  — offline unit tests for the general spec rules (no Gemini, no server)
+const { sanitizeSpec, qaSpec, tidyPrint, snapHair } = require('../lib/rules'); const minifig = require('../lib/minifig'); const fs = require('fs');
+let pass = 0, fail = 0; const ok = (c, n) => { c ? pass++ : fail++; console.log((c ? 'PASS ' : 'FAIL ') + n); };
+const mk = () => JSON.parse(fs.readFileSync(__dirname + '/forest_spec.json', 'utf8'));
+const desc = { accessories: 'holds a bundle of dry branches', legs: 'wide trousers with leaves on them' };
+let sp = sanitizeSpec(mk(), desc);
+ok(!sp.accessories_3d.some(a => a.type === 'sword'), 'branches mapped to sword => dropped');
+ok(sp.accessories_3d.length === 0, 'no accessory invented for carried branches');
+ok(!/#237841/i.test(sp.legs_print_svg), 'green leaf blobs removed from white trousers');
+ok(sp.legs_type === 'standard', 'wide trousers stay standard legs');
+ok(sp.footwear.height === 'low', 'wide trousers => low footwear');
+ok(/data-embroidery/.test(sp.legs_print_svg), 'delicate embroidery added instead');
+ok(qaSpec(sp).length === 0, 'qaSpec clean after sanitize: ' + qaSpec(sp).join(';'));
+ok(qaSpec(mk()).length >= 1, 'qaSpec flags the raw bad spec');
+let k = sanitizeSpec({ accessories_3d: [{ type: 'sword', kind: 'long' }], accessories_uk: 'довгий меч лицаря', legs_print_svg: null }, {});
+ok(k.accessories_3d.length === 1, 'real sword kept');
+k = sanitizeSpec({ legs_type: 'wide_skirt', skirt_color: '#fff', inspection: { legs: 'jeans' }, leg_color: '#0055BF' }, {});
+ok(k.legs_type === 'standard', 'jeans never become a skirt');
+k = sanitizeSpec({ legs_type: 'long_robe', inspection: { legs: 'long dress' }, leg_color: '#0055BF' }, {});
+ok(k.legs_type === 'long_robe', 'real dress keeps long skirt');
+const big = "<path d='M10,46 Q4,56 10,70 Q18,66 18,56 Z' fill='#237841'/><rect x='0' y='60' width='100' height='6' fill='#DCBC81'/>";
+const t = tidyPrint(big, '#F4F4F4', 'legs'); ok(/scale\(/.test(t.svg) || !/#237841/.test(t.svg), 'big blob shrunk/pastelised'); ok(/width='100'/.test(t.svg), 'full-width band untouched');
+ok(snapHair('#8c6239') !== '#8c6239', 'hair colour snapped to LEGO palette');
+const svg = minifig.renderSvg(sp); ok(svg.length > 1000 && minifig.textures(sp).legs, 'renders 2D + textures after rules');
+console.log(`${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

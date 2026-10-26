@@ -1,0 +1,13 @@
+{"identity":"","is_known_character":false,
+ "skin_color":"#F2CD37","hand_color":"#F2CD37",
+ "hair_style":"long_straight","hair_color":"#8c6239","headgear":"none","neck_accessory":"none","legs_type":"standard",
+ "torso_color":"#582a12","arm_color":"#582a12","sleeves":"long","collar":"none",
+ "hip_color":"#F4F4F4","leg_color":"#F4F4F4",
+ "face":{"gender":"female","expression":"smile","brows":true,"lipstick":null},
+ "bust_size":"medium",
+ "footwear":{"type":"boots","color":"#1b1b1b","sole_color":"#1b1b1b"},
+ "torso_print_svg":"<path d='M40,0 Q50,14 60,0' fill='none' stroke='#3a1a0c' stroke-width='1.2'/><path d='M50,14 L50,100' stroke='#3a1a0c' stroke-width='1'/><path d='M26,66 L74,66 L80,96 L20,96 Z' fill='none' stroke='#3a1a0c' stroke-width='1.2'/>",
+ "legs_print_svg":"<path d='M23,29 L23,100 M77,29 L77,100' stroke='#CFCFCF' stroke-width='1'/><path d='M10,46 Q4,56 10,70 Q18,66 18,56 Q18,50 10,46 Z' fill='#237841'/><path d='M82,46 Q76,56 82,70 Q90,66 90,56 Q90,50 82,46 Z' fill='#237841'/>",
+ "accessories_3d":[{"type":"sword","kind":"long","color":"#583927"}],
+ "accessories_uk":"оберемок гілок у руці","inspection":{"legs":"wide light pink-white trousers with delicate embroidery, black shoes barely visible under hems","accessories":"holds a bundle of dry branches"},
+ "notes_uk":"широкі штани з вишивкою"}
