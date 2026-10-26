@@ -104,7 +104,22 @@ const shade = hex => '#' + new THREE.Color(hex).multiplyScalar(0.75).getHexStrin
 function RoundedBox(w, h, d, r) { const s = new THREE.Shape(), x = -w / 2, y = -h / 2; s.moveTo(x + r, y); s.lineTo(x + w - r, y); s.quadraticCurveTo(x + w, y, x + w, y + r); s.lineTo(x + w, y + h - r); s.quadraticCurveTo(x + w, y + h, x + w - r, y + h); s.lineTo(x + r, y + h); s.quadraticCurveTo(x, y + h, x, y + h - r); s.lineTo(x, y + r); s.quadraticCurveTo(x, y, x + r, y);
   const g = new THREE.ExtrudeGeometry(s, { depth: d - 2 * Math.min(r, 1), bevelEnabled: true, bevelThickness: Math.min(r, 1), bevelSize: Math.min(r, 1), bevelSegments: 2 }); g.center(); return g; }
 
+// ---- neutral pose guard: every build starts from an EMPTY scene + reset camera/controls; builds are serialized (no two figures, no stacked groups/decals/transforms) ----
+let BASE_CHILDREN = null, BUILD_N = 0, BUILD_CHAIN = Promise.resolve();
+function resetScene() {
+  if (!BASE_CHILDREN) BASE_CHILDREN = new Set(scene.children);
+  for (const o of [...scene.children]) { if (BASE_CHILDREN.has(o)) continue; scene.remove(o);
+    o.traverse(n => { if (n.geometry) n.geometry.dispose(); const ms = n.material ? (Array.isArray(n.material) ? n.material : [n.material]) : []; ms.forEach(m => { if (m.map) m.map.dispose(); m.dispose(); }); }); }
+  window.PARTS = []; window.CUSTOM_PARTS = []; window.READY = false; window.OFFICIAL_HEAD = false; window.FACE = null; mini.scene = null; ground.position.set(0, 0, 0);
+  camera.position.set(0, 0, 100); camera.up.set(0, 1, 0); camera.quaternion.identity(); controls.target.set(0, 0, 0); controls.update();
+}
+// world placement of the body parts (position + rotation in degrees): identical for every figure built in the neutral pose
+window.poseReport = () => { const out = {}; for (const p of window.PARTS || []) { if (!['973', '3818', '3819', '3820', '3815', '3816', '3817'].includes(p.id) || !p.mesh || !p.mesh.isMesh) continue; p.mesh.updateMatrixWorld(true);
+    const q = new THREE.Quaternion(), pos = new THREE.Vector3(); p.mesh.matrixWorld.decompose(pos, q, new THREE.Vector3()); const e = new THREE.Euler().setFromQuaternion(q, 'XYZ'); const k = p.id + (out[p.id + '#a'] ? '#b' : '#a');
+    out[k] = [pos.x, pos.y, pos.z, e.x / D, e.y / D, e.z / D].map(v => +v.toFixed(2)); } out.sceneMeshes = scene.children.filter(o => o.isMesh || o.isGroup).length; return out; };
+window.rebuildFigure = (spec) => { window.MINIFIG_SPEC = spec; window.MINIFIG_TEX = spec && spec.textures ? spec.textures : null; return BUILD_CHAIN = BUILD_CHAIN.then(() => build()); };
 async function build() {
+  resetScene(); const myBuild = ++BUILD_N;
   const S = await getSpec(); const t0 = performance.now();
   const skin = S.skin_color || '#F2CD37', torsoC = S.torso_color || '#C91A09', armC = S.arm_color || torsoC, handC = S.hand_color || skin;
   const hipC = S.hip_color || S.leg_color || '#0055BF', legL = S.leg_color || '#0055BF', legR = S.leg_right_color || legL, hairC = S.hair_color || '#583927';
@@ -161,7 +176,7 @@ async function build() {
   let neckMesh = null;
   if (neckP) neckMesh = place(neckP, plastic(S.neck_accessory_color || '#A0A5A9', S.neck_accessory === 'armor_breastplate' || S.neck_accessory === 'shoulder_pads' ? { metalness: 0.5, roughness: 0.3 } : {}), XF(0, 0, 0));
   // LDraw: y down, -z = front. Flip to three.js (y up, +z front)
-  fig.rotation.x = Math.PI; scene.add(fig); fig.updateMatrixWorld(true);
+  fig.position.set(0, 0, 0); fig.scale.set(1, 1, 1); fig.rotation.set(Math.PI, 0, 0); scene.add(fig); fig.updateMatrixWorld(true);
   if (legsT === 'snake_tail') { (window.CUSTOM_PARTS = window.CUSTOM_PARTS || []).push('Хвіст змії (немає офіційної деталі LDraw)'); // molded serpent tail (Ninjago-style): drops from the hips, curls back into a flat coil that the figure stands on
     const Y0 = 52 + dy, G = 84 + dy; // hips bottom, ground (LDraw y down, -z = front)
     const pts = [V3(0, Y0 - 6, 0), V3(0, Y0 + 6, 0.5), V3(0, Y0 + 16, 3), V3(0, G - 9, 9), V3(0, G - 7, 20), V3(-14, G - 6, 24), V3(-22, G - 5, 10), V3(-18, G - 4, -6), V3(-4, G - 4, -14), V3(12, G - 3.5, -12), V3(20, G - 3, 2), V3(18, G - 2.5, 14)];
@@ -231,7 +246,7 @@ async function build() {
   // ---- procedurally SCULPTED LEGO hair (real hairstyle -> smooth sculpted ABS piece) ----
   if (hb && S.hair_style === 'sculpt' && hg === 'none') {
     const HS = S.hair_sculpt || {}, kind = HS.kind || 'messy', len = HS.length || 'short', fr = HS.fringe || 'side', vol = Math.max(0, Math.min(1, +HS.volume || 0.5));
-    let seed = 1234; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    let seed = Math.max(1, Math.floor(+HS.seed) || 1234); const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
     const cx = (hb.min.x + hb.max.x) / 2, cz = (hb.min.z + hb.max.z) / 2, H = hb.max.y - hb.min.y, R = (hb.max.x - hb.min.x) / 2;
     const cy = hb.max.y - H * 0.42, brow = hb.min.y + H * 0.66, geos = [];
     const put = (geo, x, y, z, s = [1, 1, 1], r = [0, 0, 0]) => { const g = (geo.index ? geo.toNonIndexed() : geo.clone()); g.deleteAttribute('uv'); g.applyMatrix4(new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(...r)), new THREE.Vector3(...s))); geos.push(g); };
@@ -319,11 +334,11 @@ async function build() {
   const dist = sz.y * 2.35;
   window.setView = v => { const d = new THREE.Vector3(...window.VIEWS[v]).normalize().multiplyScalar(dist); camera.position.copy(c).add(d); controls.update(); };
   setView(params.get('view') || 'three');
-  await buildPanel();
+  await buildPanel(S);
   $('msg').textContent = ''; window.READY = true; window.BUILD_MS = Math.round(performance.now() - t0);
 }
 // ---- parts breakdown panel + isolated mini 3D view ----
-const ROLE = [[/Head|Headdress/, 'Голова'], [/Hair/, 'Волосся'], [/Helmet|Hat|Cap\b|Hood|Cowl|Bandana|Wrap|Beanie/, 'Головний убір'], [/Torso/, 'Торс'], [/Arm/, 'Рука'], [/Hand/, 'Кисть'], [/Hips|Leg|Skirt|Slope/, 'Низ / ноги'], [/Cape|Armour|Vest|Jacket|Lifevest|Epaulette|Shell|Breastplate|Neck/, 'Плащ / броня'], [/Sword|Shield/, 'Аксесуар']];
+const ROLE = [[/Cape|Armou?r|Vest|Jacket|Lifevest|Epaulette|Shell|Breastplate|Neck/, 'Плащ / броня'], [/Head|Headdress/, 'Голова'], [/Hair/, 'Волосся'], [/Helmet|Hat|Cap\b|Hood|Cowl|Bandana|Wrap|Beanie/, 'Головний убір'], [/Torso/, 'Торс'], [/\bArm\b/, 'Рука'], [/Hand/, 'Кисть'], [/Hips|Leg|Skirt|Slope/, 'Низ / ноги'], [/Cape|Armour|Vest|Jacket|Lifevest|Epaulette|Shell|Breastplate|Neck/, 'Плащ / броня'], [/Sword|Shield/, 'Аксесуар']];
 const mini = { r: null, scene: null, cam: null, ctl: null };
 function showMini(p) {
   const cv = $('mini'); if (!mini.r) { mini.r = new THREE.WebGLRenderer({ canvas: cv, antialias: true, preserveDrawingBuffer: true }); mini.r.setPixelRatio(Math.min(2, devicePixelRatio)); mini.r.toneMapping = THREE.NeutralToneMapping; mini.r.outputColorSpace = THREE.SRGBColorSpace;
@@ -338,9 +353,10 @@ function showMini(p) {
   $('minihdr').innerHTML = `<b>${p.role}</b> · ${p.id} — ${p.title || ''} <span style="color:#777">(обертайте мишею; ззаду видно приховані принти)</span>`;
 }
 const LOCK_ID = params.get('id') || ''; let LOCKS = new Set();
-try { const o = JSON.parse(localStorage.getItem('lego_locks') || '{}'); if (o.id === LOCK_ID) LOCKS = new Set(o.roles || []); } catch {}
+// locks of THIS figure: stored by us for this id, else those the server applied when it made the figure (spec._locked_roles) => 🔒 stays visible after «спробувати ще раз»
+function initLocks(S) { LOCKS = new Set(); try { const o = JSON.parse(localStorage.getItem('lego_locks') || '{}'); if (o.id === LOCK_ID) LOCKS = new Set(o.roles || []); else if (S && Array.isArray(S._locked_roles)) LOCKS = new Set(S._locked_roles); } catch { if (S && Array.isArray(S._locked_roles)) LOCKS = new Set(S._locked_roles); } saveLocks(); }
 function saveLocks() { const v = { id: LOCK_ID, roles: [...LOCKS] }; try { localStorage.setItem('lego_locks', JSON.stringify(v)); } catch {} try { parent.postMessage({ lego_locks: v }, location.origin); } catch {} }
-async function buildPanel() {
+async function buildPanel(S) { initLocks(S);
   const P = window.PARTS || []; await Promise.all(P.map(async p => { if (!p.title) { try { p.title = (await (await fetch('/ldraw/lib/parts/' + p.id + '.dat')).text()).split('\n')[0].replace(/^0\s+~?/, '').trim(); } catch { p.title = ''; } } const r = ROLE.find(([re]) => re.test(p.title)); p.role = r ? r[1] : 'Деталь'; }));
   const order = ['Голова', 'Волосся', 'Головний убір', 'Плащ / броня', 'Торс', 'Рука', 'Кисть', 'Низ / ноги', 'Аксесуар', 'Деталь']; P.sort((a, b) => order.indexOf(a.role) - order.indexOf(b.role));
   const bl = id => id.startsWith('custom') ? '' : `<a target="_blank" href="https://www.bricklink.com/v2/catalog/catalogitem.page?P=${encodeURIComponent(id.replace(/^3626[bc]p.*/, '3626c'))}">BrickLink</a> · <a target="_blank" href="https://library.ldraw.org/parts/list?s=${encodeURIComponent(id)}">LDraw</a>`;
@@ -355,4 +371,4 @@ $('rot').onclick = () => { controls.autoRotate = !controls.autoRotate; $('rot').
 controls.autoRotateSpeed = 2.5; controls.autoRotate = params.get('rotate') === '1';
 $('png').onclick = () => { renderer.render(scene, camera); const a = document.createElement('a'); a.download = 'lego-minifig-3d.png'; a.href = canvas.toDataURL('image/png'); a.click(); };
 (function loop() { requestAnimationFrame(loop); controls.update(); renderer.render(scene, camera); })();
-build().catch(e => { $('msg').textContent = 'Помилка 3D: ' + e.message; console.error(e); window.READY = 'error'; });
+BUILD_CHAIN = build().catch(e => { $('msg').textContent = 'Помилка 3D: ' + e.message; console.error(e); window.READY = 'error'; });

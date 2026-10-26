@@ -20,7 +20,9 @@
   "scripts": {
     "start": "node server.js",
     "test": "node tests/rules.test.js && node tests/gem_errors.test.js",
-    "test:security": "node tests/security.test.js"
+    "test:security": "node tests/security.test.js",
+    "test:offline": "node tests/rules.test.js && node tests/gem_errors.test.js && node tests/regen.unit.test.js && node tests/regen.e2e.test.js",
+    "test:viewer": "node tests/viewer.pose.test.js"
   },
   "engines": {
     "node": ">=20"
