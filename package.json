@@ -19,10 +19,11 @@
   },
   "scripts": {
     "start": "node server.js",
-    "test": "node tests/rules.test.js && node tests/gem_errors.test.js && node tests/regen.test.js",
+    "test": "node tests/rules.test.js && node tests/fixes.test.js && node tests/gem_errors.test.js && node tests/regen.test.js",
     "test:e2e": "node tests/e2e_regen.test.js",
     "test:ui": "node tests/ui_regen.test.js",
-    "test:security": "node tests/security.test.js"
+    "test:security": "node tests/security.test.js",
+    "test:faces": "node tests/ui_faces.test.js"
   },
   "engines": {
     "node": ">=20"

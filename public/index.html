@@ -1,5 +1,6 @@
 <!doctype html><html lang="uk"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>LEGO-Двійник — знайди свою мініфігурку</title>
+<link rel="stylesheet" href="/face_picker.css">
 <style>
 :root{--bg:#0e1015;--card:#181b23;--line:#2a2f3c;--red:#e3000b;--yel:#ffd500;--blue:#0a6cff;--txt:#e9ecf2;--mut:#9aa3b5}
 *{box-sizing:border-box}body{margin:0;font-family:system-ui,Segoe UI,Roboto,sans-serif;color:var(--txt);min-height:100vh;background:radial-gradient(circle at 12px 12px,#ffffff0d 5px,#0000 6px) 0 0/24px 24px,radial-gradient(ellipse at 15% -10%,#e3000b33,#0000 45%),radial-gradient(ellipse at 100% 10%,#0a6cff2e,#0000 45%),linear-gradient(180deg,#141824,#0b0d13 70%);background-attachment:fixed}
@@ -142,7 +143,7 @@ async function gen(mode,opts={}){if(!DESC||GEN.busy)return;const ep=EPOCH;const 
   $('genProg').innerHTML=r.locks_missing?'<div class="warnbox">⚠ Замочки не вдалося застосувати: попередня фігурка вже недоступна на сервері (він перезапускався). Згенеровано все заново — зафіксуй потрібні деталі ще раз.</div>':'';
   $('gen').innerHTML=`${v3?toolbarHTML(true)+(regen&&prevSig?diffHTML(prevSig,r.signature,GEN.roles):''):''}
    ${v3?`<div id="v3wrap" style="margin-top:12px"><iframe id="v3" src="${esc(vsrc)}" title="3D мініфігурка" style="width:100%;height:100%;border:0;display:block" allow="fullscreen"></iframe></div>
-   <p class="mut">🧱 3D-мініфігурка з офіційних деталей LDraw — обертайте мишкою або пальцем, кнопки знизу: вигляд спереду/збоку/ззаду, автообертання, ⬇ PNG. <a target="_blank" href="${esc(vsrc)}">Відкрити на весь екран ↗</a></p>`:`<img src="${u}" alt="Згенерована мініфігурка"><p class="mut">ℹ️ Це спрощений 2D-шаблон: тип ніг, капюшон і скульптурне волосся повністю видно лише в 3D.</p><div class="row actions" style="margin-top:10px"><a class="btn" download="lego-minifig.png" href="${u}">⬇ Зберегти PNG</a></div>`}
+   <p class="mut">🧱 3D-мініфігурка з офіційних деталей LDraw — обертайте мишкою або пальцем, кнопки знизу: вигляд спереду/збоку/ззаду, автообертання, ⬇ PNG. <a target="_blank" href="${esc(vsrc)}">Відкрити на весь екран ↗</a></p><div id="facePanel"></div>`:`<img src="${u}" alt="Згенерована мініфігурка"><p class="mut">ℹ️ Це спрощений 2D-шаблон: тип ніг, капюшон і скульптурне волосся повністю видно лише в 3D.</p><div class="row actions" style="margin-top:10px"><a class="btn" download="lego-minifig.png" href="${u}">⬇ Зберегти PNG</a></div>`}
    ${r.author_touch_uk?`<p><span class="tag ok">✍️ авторський штрих</span> ${esc(r.author_touch_uk)}</p>`:''}
    ${(r.qa_rules||[]).filter(x=>/^(обличчя|голова|волосся|торс|ноги)/.test(x)).length?`<p class="mut">🛡 Правила якості: ${(r.qa_rules||[]).filter(x=>/^(обличчя|голова|волосся|торс|ноги)/.test(x)).map(esc).join(' · ')}</p>`:''}
    <div class="row actions" style="margin-top:8px"><button class="btn blue" data-regen-btn data-needs-idle onclick="gen(null,{regen:true})">↻ Згенерувати ще раз</button><button class="btn" data-needs-idle onclick="gen('ai')">✨ Стилізований AI-варіант (повільно)</button></div>
@@ -155,9 +156,10 @@ async function gen(mode,opts={}){if(!DESC||GEN.busy)return;const ep=EPOCH;const 
    ${(r.alternatives||[]).length?`<h3>Інші варіанти</h3><div class="row">${r.alternatives.map(a=>`<div style="text-align:center"><img src="data:${a.mime};base64,${a.image}" style="width:150px;border-radius:8px;background:#1c2130"><div class="mut">${esc(a.score)}/10</div></div>`).join('')}</div>`:''}
    ${v3?`<details style="margin-top:12px"><summary class="mut">2D-ескіз (плоский шаблон, для порівняння)</summary><p class="mut">ℹ️ 2D-шаблон спрощений: він не показує тип ніг (спідниця/халат), капюшон і скульптурне волосся — повна форма видна в 3D вище.</p><img src="${u}" style="width:220px;border-radius:8px;background:#1c2130"> <a class="btn" download="lego-minifig-2d.png" href="${u}">⬇ 2D PNG</a></details>`:''}<details style="margin-top:12px"><summary class="mut">Специфікація / промпт і етапи</summary><pre class="mut" style="white-space:pre-wrap">${esc(r.prompt||JSON.stringify(r.spec,null,1))}</pre><pre class="mut" style="white-space:pre-wrap">${(r.steps||[]).map(esc).join('\n')}</pre></details>`;
   paintLockBar();
+  if(v3&&mode!=='ai'&&window.FacePicker)window.FacePicker.show(GEN.id);
   if(regen&&v3&&mode!=='ai')$('v3wrap').scrollIntoView({behavior:'smooth',block:'center'});
  }catch(e){if(ep!==EPOCH)return;$('genProg').innerHTML='';const tmp=document.createElement('div');showErr(tmp,e,()=>gen(mode,opts),'Спробувати ще раз');$('genProg').appendChild(tmp)}
  finally{if(ep===EPOCH)setBusy(false)}}
 $('genBtn').onclick=()=>gen();
-</script><script src="/account.js" defer></script>
+</script><script src="/face_picker.js" defer></script><script src="/account.js" defer></script>
 </body></html>

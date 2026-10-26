@@ -1,0 +1,15 @@
+{
+ "identity": null, "is_known_character": false, "subject_kind": "human",
+ "inspection": { "framing": "knees_up", "hair": "dirty blonde hair pulled into a low bun at the back, loose strands by the face", "face": "young woman with round glasses, neutral look", "torso_front": "long black leather trench coat with a belt over a white top", "lower_garment": "long coat", "legs": "long black leather trench coat down below the knees", "accessories": "small black crossbody bag with a strap" },
+ "design": { "concept": "young woman in a long black leather trench with a belt, white top, glasses, low bun", "palette": ["#1B2A34", "#F4F4F4"] },
+ "skin_color": "#F2CD37", "hand_color": "#F2CD37",
+ "hair_style": "long", "hair_color": "#6C6E68", "headgear": "none",
+ "legs_type": "long_robe", "skirt_color": null, "leg_color": "#F2CD37", "hip_color": "#F2CD37",
+ "legs_print_svg": "<rect x='0' y='29' width='100' height='71' fill='#F2CD37'/><path d='M40,30 L60,30 L60,34 L40,34 Z' fill='#1b1b1b'/>",
+ "torso_color": "#1B2A34", "arm_color": "#1B2A34", "collar": "none", "sleeves": "long",
+ "layers": { "outer": { "type": "open_jacket", "color": "#1B2A34", "pattern": "plain", "pattern_color": "#F4F4F4" }, "under": { "type": "tee", "color": "#F4F4F4" } },
+ "footwear": { "type": "shoes", "color": "#1b1b1b" },
+ "accessories_3d": [{ "type": "bag", "style": "crossbody", "color": "#1b1b1b" }],
+ "face": { "gender": "female", "age": "old", "wrinkles": true, "forehead_wrinkles": true, "cheek_lines": true, "expression": "neutral", "glasses": "round", "lashes": true, "brows": true },
+ "notes_uk": "довгий чорний шкіряний тренч з поясом, білий топ, окуляри, пучок"
+}

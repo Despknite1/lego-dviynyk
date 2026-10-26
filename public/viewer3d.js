@@ -97,6 +97,7 @@ const HEADMOLD = { standard: null, turtle: '12607', snake: '18955' };
 // neck / torso accessories (placed at torso origin)
 const NECKACC = { none: null, cape: '4524', armor_breastplate: '2587', shoulder_pads: '11097', life_vest: '97895', life_vest_classic: '2610', life_jacket: '97895', vest: '3840', epaulettes: '2526', turtle_shell: '12609' };
 // lower body: [part, y]
+const SKIRT_FAM = new Set(['skirt', 'long_robe', 'wide_skirt', 'dress_slope']);
 const LEGS = { standard: null, short: [['41879a', 32]], mermaid_tail: [['51345', 32]], skirt: [['3815', 32], ['3816', 44], ['3817', 44], ['u9209c01', 32, 0, 0, 'skirt']], long_robe: [['36036', 32]], wide_skirt: [['24068', 32]], dress_slope: [['3678b', 32, -10, Math.PI]], snake_tail: [['3815', 32]], genie_tail: [['19859', 32]] };
 const XF = (x, y, z, rx = 0, ry = 0, rz = 0) => { const m = new THREE.Matrix4(); m.makeRotationFromEuler(new THREE.Euler(rx, ry, rz, 'XYZ')); m.setPosition(x, y, z); return m; };
 const D = Math.PI / 180; const V3 = (x, y, z) => new THREE.Vector3(x, y, z);
@@ -121,7 +122,9 @@ async function build() {
   resetScene();
   const S = await getSpec(); const t0 = performance.now();
   const skin = S.skin_color || '#F2CD37', torsoC = S.torso_color || '#C91A09', armC = S.arm_color || torsoC, handC = S.hand_color || skin;
-  const hipC = S.hip_color || S.leg_color || '#0055BF', legL = S.leg_color || '#0055BF', legR = S.leg_right_color || legL, hairC = S.hair_color || '#583927';
+  const okC = c => typeof c === 'string' && /^#[0-9a-f]{6}$/i.test(c); // invalid/missing bottom colour => top colour or black, NEVER the old blue/yellow default
+  const lowFb = okC(S.skirt_color) && SKIRT_FAM.has(S.legs_type || '') ? S.skirt_color : okC(S.torso_color) ? S.torso_color : '#1B2A34';
+  const legL = okC(S.leg_color) ? S.leg_color : lowFb, hipC = okC(S.hip_color) ? S.hip_color : legL, legR = okC(S.leg_right_color) ? S.leg_right_color : legL, hairC = S.hair_color || '#583927';
   const hg = HEADGEAR[S.headgear] ? S.headgear : 'none';
   if (hg === 'none' && S.hair_style && !(S.hair_style in HAIR) && !S.hair_part) { S.hair_sculpt = S.hair_sculpt || { kind: /curl|afro/.test(S.hair_style) ? 'curls' : /long/.test(S.hair_style) ? 'long' : 'messy' }; S.hair_style = 'sculpt'; } // unknown style => sculpt
   const hairPart = hg !== 'none' ? null : (S.hair_part || HAIR[S.hair_style || 'short'] || null);
@@ -155,7 +158,7 @@ async function build() {
   const [handR, handL] = hands;
   let hips = null, lr = null, ll = null; const lowers = [];
   if (legsT === 'standard') { hips = place('3815', plastic(hipC, { roughness: 0.55, clearcoat: 0.15, clearcoatRoughness: 0.5, envMapIntensity: 0.55 }), XF(0, 32 + dy, 0)); lr = place('3816', plastic(legR), XF(0, 44 + dy, 0)); ll = place('3817', plastic(legL), XF(0, 44 + dy, 0)); }
-  else for (const [n, y, z = 0, ry = 0, ck] of LEGS[legsT]) { const m = place(n, plastic(ck === 'skirt' ? (S.skirt_color || legL) : n === '3815' ? hipC : n === '3816' ? legR : legL, ck === 'skirt' ? { roughness: 0.6, clearcoat: 0.1 } : {}), XF(0, y + dy, z, 0, ry, 0)); if (m) lowers.push(m); }
+  else for (const [n, y, z = 0, ry = 0, ck] of LEGS[legsT]) { const m = place(n, plastic(ck === 'skirt' ? (okC(S.skirt_color) ? S.skirt_color : legL) : n === '3815' ? hipC : n === '3816' ? legR : (SKIRT_FAM.has(legsT) && okC(S.skirt_color)) ? S.skirt_color : legL, ck === 'skirt' ? { roughness: 0.6, clearcoat: 0.1 } : {}), XF(0, y + dy, z, 0, ry, 0)); if (m) lowers.push(m); }
   if (hairPart && hairPart.includes('+')) { // composite hair: FRONT (fringe) of one official mould + BACK (bun) of another, one colour, one plastic
     const [fp, bp] = hairPart.split('+'), mat = plastic(hairC, { roughness: 0.4 }), SPLIT = HAIR_SPLIT_Z;
     const clip = (name, keep) => { if (!P[name]) return null; const g = toMesh(P[name], mat).geometry; const n = g.index ? g.toNonIndexed() : g; const pa = n.attributes.position, na = n.attributes.normal, P2 = [], N2 = [];
