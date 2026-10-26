@@ -165,8 +165,8 @@ const colIn = (t, part) => { t = t.toLowerCase(); const m = t.match(new RegExp('
 function figAttrs(name) {
   const t = ' ' + name + ' ';
   return {
-    gender: /\b(Female|Woman|Girl|Lady|Queen|Princess|Lipstick|Eyelashes|Ponytail|Pigtails|Witch|Mermaid|Bride|Mother|Mrs|Ms|Miss|Sister|Daughter|Ballerina|Skirt)\b/i.test(t) ? 'female' : /\b(Male|Man|Men|Boy|King|Prince|Beard|Moustache|Mustache|Goatee|Sideburns|Stubble|Tie|Bow Tie|Suit|Pilot|Captain|Mr|Sir|Father|Brother|Son|Policeman|Fireman|Businessman|Gentleman|Chin Dimple)\b/i.test(t) ? 'male' : null,
-    nonhuman: /\b(Elphaba|Alien|Zombie|Skeleton|Robot|Droid|Orc|Goblin|Troll|Monster|Vampire|Ghost|Mummy|Werewolf|Creature|Martian|Clown|Yoda|Hulk|Gamora|Thanos|Mystique|Na'vi|Avatar|Smurf|Ogre|Elf|Green Skin|Blue Skin|Red Skin|Lime|Medium Lavender Skin|Shrek|Frankenstein|Gargoyle|Cyborg|Android|Bat|Shark|Dog|Cat|Bear|Monkey|Gorilla|Chicken|Pig|Wolf|Dinosaur|Dragon|Lizard|Fish)\b/i.test(t),
+    gender: /\b(Female|Woman|Women|Girl|Lady|Businesswoman|Camerawoman|Policewoman|Waitress|Actress|Maid|Nurse|Queen|Princess|Lipstick|Eyelashes|Ponytail|Pigtails|Witch|Mermaid|Bride|Mother|Mrs|Ms|Miss|Sister|Daughter|Ballerina|Skirt)\b/i.test(t) ? 'female' : /\b(Male|Man|Men|Boy|King|Prince|Beard|Moustache|Mustache|Goatee|Sideburns|Stubble|Pilot|Captain|Mr|Sir|Father|Brother|Son|Policeman|Fireman|Businessman|Gentleman|Chin Dimple)\b/i.test(t) ? 'male' : null,
+    nonhuman: /\b(Elphaba|Alien|Zombie|Skeleton|Robot|Droid|Orc|Goblin|Troll|Monster|Vampire|Ghost|Mummy|Werewolf|Creature|Martian|Clown|Yoda|Hulk|Gamora|Thanos|Mystique|Na'vi|Avatar|Smurf|Ogre|Elf|Green Skin|Blue Skin|Red Skin|Medium Lavender Skin|Shrek|Frankenstein|Gargoyle|Cyborg|Android|Shark|Bear|Eagle|Aarakocra|Bird|Owl|Hawk|Falcon|Lion|Tiger|Horse|Rabbit|Frog|Mouse|Fox|Deer|Penguin|Monkey|Gorilla|Chicken|Pig|Wolf|Dinosaur|Lizard|Fish)\b/i.test(t),
     smile: /\b(Smile|Smiling|Grin|Open Mouth|Laughing|Teeth)\b/i.test(t), lipstick: /\bLipstick|Red Lips|Pink Lips\b/i.test(t), neutral: /\b(Neutral|Closed Mouth|Pursed|Serious|Frown|Stern)\b/i.test(t),
     bald: /\bBald\b/i.test(t) && !/Bald on Top|Half Bald/i.test(t) ? 'bald' : /Bald on Top|Half Bald/i.test(t) ? 'partly' : null,
     hair: /\b(Hair|Ponytail|Pigtails|Braid|Bun|Mohawk|Bangs)\b/i.test(t),
@@ -254,7 +254,7 @@ app.post('/api/search', wrap(async ({ description, crop }, stage = () => {}) => 
   for (let i = 0; i < 50 && pool.size < 150; i++) lists.forEach(l => { const f = l[i]; if (f && !pool.has(f.fig_num) && pool.size < 150) pool.set(f.fig_num, f); });
   const total = pool.size;
   const kept = [];
-  const NONFIG = /^(belv|scala|fab|dup|tech|frnd|clikits|jsta|hrp|bdp(?!\d)|wwg|hp_|znap|mdoll|fdoll|elf\d|dsn\d)/i, NONFIG_NAME = /belville|scala|fabuland|duplo|technic figure|mini-?doll|friends|elves|disney princess|clikits|jack stone|znap|galidor|bionicle|mosaic|key chain|magnet/i;
+  const NONFIG = /^(belv|scala|fab|dup|tech|frnd|clikits|jsta|hrp|bdp(?!\d)|wwg|hp_|znap|mdoll|fdoll|elf\d|dsn\d|dp\d|gdh|wed\d|wck|par\d)/i, NONFIG_NAME = /belville|scala|fabuland|duplo|technic figure|mini[- ]?dolls?|friends|elves|disney princess|clikits|jack stone|znap|galidor|bionicle|mosaic|key chain|magnet/i;
   for (const f of [...pool.values()]) if (NONFIG.test(f.fig_num) || NONFIG_NAME.test(f.name + ' ' + (f.category || ''))) pool.delete(f.fig_num);
   for (const f of pool.values()) { const a = attrMatch(sa, f.name, f.category); if (a) kept.push({ ...f, sc: a.sc + (f.suggested ? 2 : 0), m: a.m }); }
   kept.sort((x, y) => y.sc - x.sc);
@@ -279,7 +279,7 @@ app.post('/api/search', wrap(async ({ description, crop }, stage = () => {}) => 
       } catch (e) { log('rerank fail', e.message); if (e.quota) throw e; }
     }
   }
-  if (!rank) rank = top.slice(0, 6).map(f => ({ f, score: Math.min(60, 35 + f.sc * 3), why: 'Збіг за назвою в каталозі (візуальне порівняння недоступне).' }));
+  if (!rank) { const sgF = String(sa.gender || '').toLowerCase(); const strict = (sgF === 'male' || sgF === 'female') ? top.filter(f => figAttrs(f.name).gender === sgF) : top; rank = strict.slice(0, 6).map(f => ({ f, score: Math.min(60, 35 + f.sc * 3), why: 'Збіг за назвою в каталозі (візуальне порівняння недоступне).' })); }
   log('rerank scores', rank.map(r => r.score).join(','));
   if (!rank) rank = top.slice(0, 6).map(f => ({ f, score: Math.min(60, 35 + f.sc * 3), why: 'Збіг за назвою в каталозі (візуальне порівняння недоступне).' }));
   rank = rank.filter(r => r.score >= 35).sort((a, b) => b.score - a.score).slice(0, 6);

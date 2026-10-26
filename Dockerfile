@@ -10,7 +10,7 @@ COPY public ./public
 COPY faces/catalog.json ./faces/catalog.json
 COPY ldraw ./ldraw
 ENV NODE_ENV=production LDRAW_DIR=/app/ldraw PORT=8787
-RUN mkdir -p /app/data && chown -R node:node /app/data
+RUN mkdir -p /app/data /app/out && chown -R node:node /app/data /app/out
 USER node
 EXPOSE 8787
 HEALTHCHECK CMD curl -fsS http://localhost:8787/healthz || exit 1
