@@ -17,14 +17,16 @@ const scene = new THREE.Scene();
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; scene.background = t; }
 const pmrem = new THREE.PMREMGenerator(renderer); scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
 const camera = new THREE.PerspectiveCamera(30, 1, 1, 5000);
-const controls = new OrbitControls(camera, canvas); controls.enableDamping = true; controls.target.set(0, 0, 0);
+const controls = new OrbitControls(camera, canvas); controls.enableDamping = true; controls.target.set(0, 0, 0); controls.addEventListener('change', () => wake(400));
 const key = new THREE.DirectionalLight('#ffffff', 1.6); key.position.set(-80, 160, 140); key.castShadow = true;
 key.shadow.mapSize.set(2048, 2048); Object.assign(key.shadow.camera, { left: -80, right: 80, top: 80, bottom: -80, near: 10, far: 600 }); key.shadow.radius = 6; key.shadow.bias = -0.0005;
 scene.add(key); const fill = new THREE.DirectionalLight('#ffffff', 0.5); fill.position.set(120, 40, 60); scene.add(fill);
 scene.add(new THREE.HemisphereLight('#ffffff', '#dddddd', 0.35));
 const ground = new THREE.Mesh(new THREE.PlaneGeometry(2000, 2000), new THREE.ShadowMaterial({ opacity: 0.16 })); ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
 
-function resize() { const w = canvas.parentElement.clientWidth || innerWidth, h = canvas.parentElement.clientHeight || innerHeight; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); }
+// idle rendering: draw only while something moves (two WebGL canvases + a 2048px shadow map used to be redrawn 60x/s forever)
+let until = performance.now() + 4000; const wake = (ms = 3000) => { until = Math.max(until, performance.now() + ms); }; // keep drawing for a few seconds after anything changes (late textures / decals)
+function resize() { wake(); const w = canvas.parentElement.clientWidth || innerWidth, h = canvas.parentElement.clientHeight || innerHeight; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); }
 addEventListener('resize', resize); resize();
 
 const params = new URLSearchParams(location.search);
@@ -335,10 +337,10 @@ async function build() {
   ground.position.y = new THREE.Box3().setFromObject(fig).min.y; controls.target.copy(c);
   window.VIEWS = { front: [0, 0.05, 1], side: [1, 0.05, 0], back: [0, 0.05, -1], three: [0.75, 0.22, 1] };
   const dist = sz.y * 2.35;
-  window.setView = v => { const d = new THREE.Vector3(...window.VIEWS[v]).normalize().multiplyScalar(dist); camera.position.copy(c).add(d); controls.update(); };
+  window.setView = v => { wake(); const d = new THREE.Vector3(...window.VIEWS[v]).normalize().multiplyScalar(dist); camera.position.copy(c).add(d); controls.update(); };
   setView(params.get('view') || 'three');
   await buildPanel();
-  $('msg').textContent = ''; window.READY = true; window.BUILD_MS = Math.round(performance.now() - t0);
+  $('msg').textContent = ''; wake(); window.READY = true; window.BUILD_MS = Math.round(performance.now() - t0);
 }
 // ---- parts breakdown panel + isolated mini 3D view ----
 const ROLE = [[/Head|Headdress/, 'Голова'], [/Hair/, 'Волосся'], [/Helmet|Hat|Cap\b|Hood|Cowl|Bandana|Wrap|Beanie/, 'Головний убір'], [/Torso/, 'Торс'], [/Arm/, 'Рука'], [/Hand/, 'Кисть'], [/Hips|Leg|Skirt|Slope/, 'Низ / ноги'], [/Cape|Armour|Vest|Jacket|Lifevest|Epaulette|Shell|Breastplate|Neck/, 'Плащ / броня'], [/Sword|Shield/, 'Аксесуар']];
@@ -351,17 +353,30 @@ function roleOf(p, hairIds, hatIds, neckIds) {
 const mini = { r: null, scene: null, cam: null, ctl: null };
 function showMini(p) {
   const cv = $('mini'); if (!mini.r) { mini.r = new THREE.WebGLRenderer({ canvas: cv, antialias: true, preserveDrawingBuffer: true }); mini.r.setPixelRatio(Math.min(2, devicePixelRatio)); mini.r.toneMapping = THREE.NeutralToneMapping; mini.r.outputColorSpace = THREE.SRGBColorSpace;
-    mini.cam = new THREE.PerspectiveCamera(30, 1, 0.5, 3000); mini.ctl = new OrbitControls(mini.cam, cv); mini.ctl.enableDamping = true; (function l() { requestAnimationFrame(l); if (mini.scene) { mini.ctl.update(); mini.r.render(mini.scene, mini.cam); } })(); }
+    mini.cam = new THREE.PerspectiveCamera(30, 1, 0.5, 3000); mini.ctl = new OrbitControls(mini.cam, cv); mini.ctl.enableDamping = true; mini.until = performance.now() + 3000; mini.ctl.addEventListener('change', () => { mini.until = Math.max(mini.until, performance.now() + 400); }); (function l() { requestAnimationFrame(l); if (mini.scene) { const mv = mini.ctl.update(); if (mv || performance.now() < mini.until) mini.r.render(mini.scene, mini.cam); } })(); }
   const w = cv.clientWidth, h = cv.clientHeight; mini.r.setSize(w, h, false); mini.cam.aspect = w / h; mini.cam.updateProjectionMatrix();
   const sc = new THREE.Scene(); sc.background = new THREE.Color('#1c2130'); if (!mini.env) mini.env = new THREE.PMREMGenerator(mini.r).fromScene(new RoomEnvironment(), 0.04).texture; sc.environment = mini.env;
   const k = new THREE.DirectionalLight('#fff', 1.6); k.position.set(-80, 160, 140); sc.add(k); const f2 = new THREE.DirectionalLight('#fff', 0.6); f2.position.set(100, 40, -120); sc.add(f2); sc.add(new THREE.HemisphereLight('#fff', '#ddd', 0.5));
   const add = o => { o.updateMatrixWorld(true); const c = o.clone(); c.matrixAutoUpdate = false; c.matrix.copy(o.matrixWorld); sc.add(c); };
   add(p.mesh); const ms = []; p.mesh.traverse(o => { if (o.userData.decals) ms.push(...o.userData.decals); }); ms.forEach(add);
   const box = new THREE.Box3().setFromObject(p.mesh); const c = box.getCenter(new THREE.Vector3()), r = box.getSize(new THREE.Vector3()).length();
-  mini.ctl.target.copy(c); mini.cam.position.copy(c).add(new THREE.Vector3(0.7, 0.35, 1).normalize().multiplyScalar(r * 1.9)); mini.ctl.update(); mini.scene = sc;
+  mini.ctl.target.copy(c); mini.cam.position.copy(c).add(new THREE.Vector3(0.7, 0.35, 1).normalize().multiplyScalar(r * 1.9)); mini.ctl.update(); mini.scene = sc; mini.until = performance.now() + 3000;
   $('minihdr').innerHTML = `<b>${p.role}</b> · ${p.id} — ${p.title || ''} <span style="color:#777">(обертайте мишею; ззаду видно приховані принти)</span>`;
 }
-const LOCK_ID = params.get('id') || ''; let LOCKS = new Set((params.get('locks') || '').split(',').filter(Boolean));
+const LOCK_ID = params.get('id') || '';
+// ---- "closest faces" trigger: hovering / clicking the HEAD (in the parts list or on the 3D figure) asks the parent page to open the face picker flyout ----
+const askHead = (open, src) => { try { parent.postMessage({ lego_head: { id: LOCK_ID, open, src } }, location.origin); } catch {} };
+const HEAD_ROLES = new Set(['Голова', 'Волосся', 'Головний убір']);
+const ray = new THREE.Raycaster(), ndc = new THREE.Vector2(); let headT = 0, lastMv = 0, overHead = false, downAt = null;
+function headHit(e) { const ms = (window.PARTS || []).filter(p => HEAD_ROLES.has(p.role) && p.mesh).map(p => p.mesh); if (!ms.length) return false; const r = canvas.getBoundingClientRect(); ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1); ray.setFromCamera(ndc, camera); return ray.intersectObjects(ms, true).length > 0; }
+let mvT = 0;
+function onMove(e) { lastMv = performance.now(); const h = headHit(e); canvas.style.cursor = h ? 'pointer' : ''; if (h && !overHead) { clearTimeout(headT); headT = setTimeout(() => askHead(true, '3d'), 200); } if (!h) clearTimeout(headT); overHead = h; }
+canvas.addEventListener('pointermove', e => { if (e.buttons) return; clearTimeout(mvT); if (performance.now() - lastMv < 90) { mvT = setTimeout(() => onMove(e), 100); return; } onMove(e); }); // throttled, with a trailing call so the LAST position always counts
+window.headPoint = () => { const ms = (window.PARTS || []).filter(p => p.role === 'Голова' && p.mesh).map(p => p.mesh); if (!ms.length) return null; const b = new THREE.Box3(); ms.forEach(m => b.expandByObject(m)); const c = b.getCenter(new THREE.Vector3()).project(camera), r = canvas.getBoundingClientRect(); return { x: r.left + (c.x + 1) / 2 * r.width, y: r.top + (1 - c.y) / 2 * r.height }; }; // test hook: where the head is on screen
+addEventListener('keydown', e => { if (e.key === 'Escape') askHead(false, 'esc'); }); // focus is inside the iframe after a click on the figure
+canvas.addEventListener('pointerleave', () => { clearTimeout(headT); clearTimeout(mvT); overHead = false; });
+canvas.addEventListener('pointerdown', e => { downAt = { x: e.clientX, y: e.clientY }; });
+canvas.addEventListener('pointerup', e => { if (!downAt) return; const moved = Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) > 5; downAt = null; if (!moved && headHit(e)) askHead(true, '3d-click'); }); let LOCKS = new Set((params.get('locks') || '').split(',').filter(Boolean));
 // the parent page owns the lock state (survives regeneration); we only report changes. No localStorage: a stale id used to leave invisible locks on a NEW figure.
 function saveLocks() { const v = { id: LOCK_ID, roles: [...LOCKS] }; try { parent.postMessage({ lego_locks: v }, location.origin); } catch {} }
 const paintLocks = () => $('plist').querySelectorAll('.lk').forEach(x => { const on = LOCKS.has(x.dataset.r); x.textContent = on ? '🔒' : '🔓'; x.setAttribute('aria-pressed', on); x.title = on ? 'Деталь зафіксована — зняти замочок' : 'Зафіксувати деталь при повторній генерації'; });
@@ -374,17 +389,18 @@ async function buildPanel() {
     + ((window.CUSTOM_PARTS || []).length ? `<div style="color:#a00;margin-top:6px">Декоративні 3D-елементи без офіційної деталі: ${window.CUSTOM_PARTS.join(', ')}</div>` : '') + `<div style="color:#777;margin:6px 0">Принти — друк на деталях; золото/срібло — металеві чорнила.</div>`;
   $('plist').querySelectorAll('.lk').forEach(b => b.onclick = e => { e.stopPropagation(); const r = b.dataset.r; LOCKS.has(r) ? LOCKS.delete(r) : LOCKS.add(r); saveLocks(); paintLocks(); });
   paintLocks(); saveLocks();
+  $('plist').querySelectorAll('.row').forEach(el => { if (P[+el.dataset.i].role !== 'Голова') return; let ht = 0; el.addEventListener('mouseenter', () => { clearTimeout(ht); ht = setTimeout(() => askHead(true, 'row'), 120); }); el.addEventListener('mouseleave', () => clearTimeout(ht)); el.addEventListener('click', () => { clearTimeout(ht); askHead(true, 'row-click'); }); });
   $('plist').querySelectorAll('.row').forEach(el => el.onclick = e => { if (e.target.tagName === 'A' || e.target.classList.contains('lk')) return; $('plist').querySelectorAll('.row').forEach(x => x.classList.remove('sel')); el.classList.add('sel'); showMini(P[+el.dataset.i]); });
   const t = P.find(p => p.role === 'Торс'); if (t) { showMini(t); $('plist').querySelector(`.row[data-i="${P.indexOf(t)}"]`)?.classList.add('sel'); }
 }
 document.querySelectorAll('[data-v]').forEach(b => b.onclick = () => setView(b.dataset.v));
-$('rot').onclick = () => { controls.autoRotate = !controls.autoRotate; $('rot').classList.toggle('on', controls.autoRotate); };
+$('rot').onclick = () => { wake(); controls.autoRotate = !controls.autoRotate; $('rot').classList.toggle('on', controls.autoRotate); };
 controls.autoRotateSpeed = 2.5; controls.autoRotate = params.get('rotate') === '1';
 $('png').onclick = () => window.savePng();
-(function loop() { requestAnimationFrame(loop); controls.update(); renderer.render(scene, camera); })();
+(function loop() { requestAnimationFrame(loop); const moved = controls.update(); if (moved || controls.autoRotate || performance.now() < until) renderer.render(scene, camera); })();
 let building = Promise.resolve();
 const doBuild = () => (building = building.then(() => build()).catch(e => { $('msg').textContent = 'Помилка 3D: ' + e.message; console.error(e); window.READY = 'error'; }));
 // in-place rebuild (used by tests and by the page when a new spec arrives): always from the neutral pose, never from the previous figure's state
 window.rebuild = spec => { window.MINIFIG_SPEC = JSON.parse(JSON.stringify(spec || {})); $('msg').textContent = 'Збираю фігурку…'; return doBuild(); };
-window.savePng = () => { renderer.render(scene, camera); const a = document.createElement('a'); a.download = 'lego-minifig-3d.png'; a.href = canvas.toDataURL('image/png'); a.click(); };
+window.savePng = () => { wake(); renderer.render(scene, camera); const a = document.createElement('a'); a.download = 'lego-minifig-3d.png'; a.href = canvas.toDataURL('image/png'); a.click(); };
 doBuild();

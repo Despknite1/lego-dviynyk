@@ -1,8 +1,10 @@
-// "Найпохожіші обличчя": after a figure is built, show 4–6 of the closest SAFE official faces (POST /api/face-options, no Gemini),
+// "Найпохожіші обличчя": a flyout to the RIGHT of the 3D screen (next to the parts / locks list). It opens when the user hovers or clicks the head
+// (row «Голова» in the parts list or the head on the 3D figure; the viewer iframe posts {lego_head}) — it is no longer a separate block below.
+// Shows 4–6 of the closest SAFE official faces (POST /api/face-options, no Gemini),
 // «Обрати» applies the face (POST /api/face-apply), locks the head (🔒 Голова) and rebuilds the 3D figure in the viewer iframe.
 window.FacePicker = (() => {
   const $ = id => document.getElementById(id), esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-  let figId = null, busy = false, chosen = null, token = 0;
+  let figId = null, busy = false, chosen = null, token = 0, loaded = false, loading = false;
   const post = async (p, b) => { const r = await fetch('/api/' + p, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) }); const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status)); return j; };
   const msg = t => { const m = $('fpMsg'); if (m) m.textContent = t || ''; };
   function card(o) {
@@ -11,17 +13,32 @@ window.FacePicker = (() => {
   }
   function paint(list, note) {
     const el = $('facePanel'); if (!el) return;
-    if (!list.length) { el.innerHTML = note ? `<div class="fp"><h3>Найпохожіші обличчя</h3><p class="mut fp-hint">${esc(note)}</p></div>` : ''; return; }
-    el.innerHTML = `<div class="fp" role="group" aria-label="Найпохожіші обличчя"><h3>🙂 Найпохожіші обличчя</h3><p class="mut fp-hint">Підібрано за статтю, віком, виразом, окулярами, бровами. Натисни «Обрати» — обличчя замінить поточне, голова зафіксується 🔒, 3D перебудується.</p><div class="fp-grid">${list.map(card).join('')}</div><div class="fp-msg mut" id="fpMsg" aria-live="polite"></div></div>`;
+    if (!list.length) { el.innerHTML = `<div class="fp"><div class="fp-head"><h3>🙂 Найпохожіші обличчя</h3><button type="button" class="fp-x" data-fp-close aria-label="Закрити">×</button></div><p class="mut fp-hint">${esc(note || 'Підходящих облич не знайдено.')}</p></div>`; const x0 = el.querySelector('[data-fp-close]'); if (x0) x0.onclick = close; return; }
+    el.innerHTML = `<div class="fp" role="group" aria-label="Найпохожіші обличчя"><div class="fp-head"><h3>🙂 Найпохожіші обличчя</h3><button type="button" class="fp-x" data-fp-close aria-label="Закрити" title="Закрити (Esc)">×</button></div><p class="mut fp-hint">Підібрано за статтю, віком, виразом, окулярами, бровами. «Обрати» — обличчя замінить поточне, голова зафіксується 🔒, 3D перебудується.</p><div class="fp-grid">${list.map(card).join('')}</div><div class="fp-msg mut" id="fpMsg" aria-live="polite"></div></div>`;
     el.querySelectorAll('[data-pick]').forEach(b => b.onclick = () => pick(b.dataset.pick));
+    const x = el.querySelector('[data-fp-close]'); if (x) x.onclick = close;
     el._list = list;
   }
-  async function show(id, opts = {}) {
-    figId = id; chosen = null; const my = ++token; const el = $('facePanel'); if (!el || !id) return;
-    el.innerHTML = '<div class="fp"><h3>🙂 Найпохожіші обличчя</h3><p class="mut fp-hint"><span class="spin"></span>Підбираю…</p></div>';
-    try { const r = await post('face-options', { id, n: opts.n || 6 }); if (my !== token) return; chosen = r.current && r.options.some(o => o.part === r.current) ? r.current : null; paint(r.options || [], r.note_uk); }
-    catch (e) { if (my === token) el.innerHTML = '<div class="fp"><p class="mut fp-hint">Не вдалося підібрати обличчя (спробуй пізніше).</p></div>'; }
+  const head = () => '<div class="fp-head"><h3>🙂 Найпохожіші обличчя</h3><button type="button" class="fp-x" data-fp-close aria-label="Закрити" title="Закрити (Esc)">×</button></div>';
+  const isOpen = () => { const el = $('facePanel'); return !!(el && el.classList.contains('open')); };
+  function close() { const el = $('facePanel'); if (el) el.classList.remove('open'); }
+  // a new figure: forget the old list, close the flyout (lazy: nothing is fetched until the head is hovered / clicked)
+  function setFigure(id) { figId = id || null; chosen = null; token++; loaded = false; loading = false; busy = false; const el = $('facePanel'); if (el) { el.classList.remove('open'); el.innerHTML = ''; el._list = null; } }
+  async function load(n) {
+    const el = $('facePanel'); if (!el || !figId || loading) return; loading = true; const my = token;
+    el.innerHTML = '<div class="fp">' + head() + '<p class="mut fp-hint"><span class="spin"></span>Підбираю…</p></div>'; const x = el.querySelector('[data-fp-close]'); if (x) x.onclick = close;
+    try { const r = await post('face-options', { id: figId, n: n || 6 }); if (my !== token) return; chosen = r.current && r.options.some(o => o.part === r.current) ? r.current : null; loaded = true; paint(r.options || [], r.note_uk); }
+    catch (e) { if (my === token) { el.innerHTML = '<div class="fp">' + head() + '<p class="mut fp-hint">Не вдалося підібрати обличчя (спробуй пізніше).</p></div>'; const x2 = el.querySelector('[data-fp-close]'); if (x2) x2.onclick = close; } }
+    finally { if (my === token) loading = false; }
   }
+  // open the flyout (and fetch the options the first time for this figure)
+  function open() {
+    const el = $('facePanel'); if (!el || !figId) return; const was = el.classList.contains('open'); el.classList.add('open');
+    if (!loaded && !loading) load(); else if (!was && matchMedia('(max-width:760px)').matches) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+  const show = (id, opts = {}) => { setFigure(id); open(); };
+  addEventListener('message', e => { if (e.origin !== location.origin || !e.data || !e.data.lego_head) return; const v = e.data.lego_head; if (!v || v.id !== figId) return; if (v.open) open(); else close(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && isOpen()) close(); });
   const waitReady = async (f, ms = 90000) => { const t0 = Date.now(); await new Promise(z => setTimeout(z, 60)); while (Date.now() - t0 < ms) { const w = f.contentWindow; if (w && w.READY === true) return true; if (w && w.READY === 'error') return false; await new Promise(z => setTimeout(z, 150)); } return false; };
   async function pick(part) {
     if (busy || !figId) return; const el = $('facePanel'), list = (el && el._list) || []; busy = true; const my = token; paint(list); el.querySelectorAll('[data-pick]').forEach(b => b.disabled = true); msg('Застосовую обличчя…');
@@ -34,5 +51,5 @@ window.FacePicker = (() => {
     } catch (e) { busy = false; paint(list); msg('Не вдалося застосувати обличчя: ' + (e && e.message ? e.message : 'помилка')); }
     busy = false;
   }
-  return { show, pick, get chosen() { return chosen; } };
+  return { show, setFigure, open, close, pick, isOpen, get chosen() { return chosen; } };
 })();

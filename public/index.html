@@ -3,7 +3,8 @@
 <link rel="stylesheet" href="/face_picker.css">
 <style>
 :root{--bg:#0e1015;--card:#181b23;--line:#2a2f3c;--red:#e3000b;--yel:#ffd500;--blue:#0a6cff;--txt:#e9ecf2;--mut:#9aa3b5}
-*{box-sizing:border-box}body{margin:0;font-family:system-ui,Segoe UI,Roboto,sans-serif;color:var(--txt);min-height:100vh;background:radial-gradient(circle at 12px 12px,#ffffff0d 5px,#0000 6px) 0 0/24px 24px,radial-gradient(ellipse at 15% -10%,#e3000b33,#0000 45%),radial-gradient(ellipse at 100% 10%,#0a6cff2e,#0000 45%),linear-gradient(180deg,#141824,#0b0d13 70%);background-attachment:fixed}
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,Segoe UI,Roboto,sans-serif;color:var(--txt);min-height:100vh;background:#0b0d13}
+body:before{content:'';position:fixed;inset:0;z-index:-1;pointer-events:none;background:radial-gradient(circle at 12px 12px,#ffffff0d 5px,#0000 6px) 0 0/24px 24px,radial-gradient(ellipse at 15% -10%,#e3000b33,#0000 45%),radial-gradient(ellipse at 100% 10%,#0a6cff2e,#0000 45%),linear-gradient(180deg,#141824,#0b0d13 70%)}
 header{display:flex;align-items:center;gap:14px;padding:18px 28px;border-bottom:4px solid var(--red);background:linear-gradient(90deg,#1a0a0c,#12141a 40%,#0d1424);box-shadow:0 6px 24px #0008;position:relative;z-index:5}
 header:after{content:'';position:absolute;left:0;right:0;bottom:-10px;height:6px;background:repeating-linear-gradient(90deg,var(--yel) 0 40px,var(--blue) 40px 80px,#0a8f3c 80px 120px,var(--red) 120px 160px);opacity:.85}
 .logo{width:46px;height:34px;background:var(--red);border-radius:6px;position:relative;box-shadow:0 4px 0 #8f0007}
@@ -18,7 +19,8 @@ main{max-width:1150px;margin:0 auto;padding:24px}
 section{margin-top:24px;background:linear-gradient(180deg,#1a1e29,#141720);border:1px solid var(--line);border-top:4px solid var(--yel);border-radius:18px;padding:22px;box-shadow:0 12px 34px #0008}
 section:nth-of-type(2){border-top-color:var(--red)}section:nth-of-type(3){border-top-color:var(--blue)}section:nth-of-type(4){border-top-color:#0a8f3c}
 h2{margin:0 0 14px;font-size:20px;color:var(--yel);font-weight:900;letter-spacing:.3px}
-.stage{position:relative;display:inline-block;max-width:100%}.stage img{max-width:100%;max-height:520px;border-radius:10px;display:block}
+.stage{position:relative;display:inline-block;max-width:100%;border-radius:12px;cursor:pointer;outline:3px solid transparent;outline-offset:3px;transition:outline-color .15s}.stage img{max-width:100%;max-height:520px;border-radius:10px;display:block}
+.stage.selected{outline-color:var(--blue)}.stage .xbtn{display:none;position:absolute;top:-12px;right:-12px;width:32px;height:32px;border-radius:50%;border:2px solid #fff;background:var(--red);color:#fff;font-size:20px;line-height:1;font-weight:700;cursor:pointer;z-index:3;box-shadow:0 4px 12px #000a;padding:0}.stage.selected .xbtn{display:block}.stage .xbtn:hover{background:#ff2a35}
 .box{position:absolute;border:3px solid var(--yel);border-radius:6px;cursor:pointer;transition:.15s}.box span{position:absolute;top:-26px;left:-3px;background:var(--yel);color:#111;font-size:12px;font-weight:700;padding:3px 7px;border-radius:5px;white-space:nowrap}
 .box:hover,.box.sel{border-color:var(--red);background:#e3000b22}.box.sel span,.box:hover span{background:var(--red);color:#fff}
 .chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}.chip{padding:8px 12px;border-radius:999px;background:#232836;border:1px solid var(--line);cursor:pointer}.chip.sel{background:var(--red)}
@@ -57,14 +59,14 @@ dl{display:grid;grid-template-columns:150px 1fr;gap:6px 12px;margin:0}dt{color:v
 <header><div class="logo"></div><h1>LEGO-<b>Двійник</b></h1><span class="mut">знайди мініфігурку, схожу на будь-кого</span></header>
 <main>
 <div class="drop" id="drop" role="button" tabindex="0" aria-label="Завантажити зображення"><h2>Вставте зображення (Ctrl+V), перетягніть сюди або натисніть, щоб вибрати файл</h2><p>Фото людини, тварини, персонажа — ми знайдемо схожі LEGO-мініфігурки</p><input type="file" id="file" accept="image/*" hidden></div>
-<section id="sPrev" class="hide"><h2>1. Зображення та об'єкти</h2><div class="stage" id="stage"><img id="prev"></div><div class="chips" id="chips"></div><p id="st1" class="mut"></p></section>
+<section id="sPrev" class="hide"><h2>1. Зображення та об'єкти</h2><div class="stage" id="stage" tabindex="0" aria-label="Завантажене фото: натисни, щоб виділити"><img id="prev" alt="Завантажене зображення" decoding="async"><button type="button" class="xbtn" id="xbtn" aria-label="Прибрати фото" title="Прибрати фото">×</button></div><div class="chips" id="chips"></div><p id="st1" class="mut"></p></section>
 <section id="sDesc" class="hide"><h2>2. Опис</h2><div id="desc"></div><div class="row actions" style="margin-top:14px"><button class="btn red" id="genBtn">🧱 Створити свою фігурку</button></div></section>
 <section id="sRes" class="hide"><h2>3. Схожі мініфігурки LEGO</h2><div id="res"></div></section>
 <section id="sGen" class="hide"><h2>4. Ваша власна мініфігурка</h2><div id="genProg" aria-live="polite"></div><div id="gen"></div></section>
 <div id="toast" role="status" aria-live="polite"></div>
 </main>
 <script>
-const $=id=>document.getElementById(id);let IMG=null,MIME='image/jpeg',DESC=null,SUBJ=null;
+const $=id=>document.getElementById(id);let IMG=null,MIME='image/jpeg',DESC=null,SUBJ=null,PH=0;// PH changes when the photo is replaced/removed: late answers for the OLD photo are dropped
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 class AppError extends Error{constructor(m,code){super(m);this.code=code}}
 const sleep=ms=>new Promise(z=>setTimeout(z,ms));
@@ -89,23 +91,32 @@ document.addEventListener('paste',e=>{for(const it of e.clipboardData.items)if(i
 const d=$('drop');d.onclick=()=>$('file').click();d.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();$('file').click()}};$('file').onchange=e=>load(e.target.files[0]);
 ['dragover','dragenter'].forEach(ev=>document.addEventListener(ev,e=>{e.preventDefault();d.classList.add('over')}));
 document.addEventListener('dragleave',()=>d.classList.remove('over'));document.addEventListener('drop',e=>{e.preventDefault();d.classList.remove('over');load(e.dataTransfer.files[0])});
-async function start(u){resetGen();['sDesc','sRes','sGen'].forEach(i=>$(i).classList.add('hide'));$('sPrev').classList.remove('hide');$('prev').src=u;document.querySelectorAll('.box').forEach(b=>b.remove());$('chips').innerHTML='';$('st1').innerHTML=spin('Шукаю об\'єкти на зображенні…');
- try{const {subjects}=await api('detect',{image:IMG,mime:MIME},m=>$('st1').innerHTML=spin(esc(m)));
+async function start(u){const ph=++PH;PICKING=false;selPhoto(false);resetGen();['sDesc','sRes','sGen'].forEach(i=>$(i).classList.add('hide'));$('sPrev').classList.remove('hide');$('prev').src=u;document.querySelectorAll('.box').forEach(b=>b.remove());$('chips').innerHTML='';$('st1').innerHTML=spin('Шукаю об\'єкти на зображенні…');
+ try{const {subjects}=await api('detect',{image:IMG,mime:MIME},m=>{if(ph===PH)$('st1').innerHTML=spin(esc(m))});if(ph!==PH)return;
   if(!subjects.length){$('st1').textContent='Об\'єктів не знайдено — використовую все зображення.';return pick({label:'Об\'єкт',box_2d:null})}
   if(subjects.length===1){$('st1').textContent='Знайдено: '+subjects[0].label;drawBoxes(subjects,0);return pick(subjects[0])}
   $('st1').textContent=`Знайдено ${subjects.length} об'єктів — оберіть одного (на фото або нижче):`;drawBoxes(subjects,-1);
- }catch(e){showErr($('st1'),e,()=>start(u),'Спробувати ще раз')}}
-function drawBoxes(s,sel){s.forEach((o,i)=>{if(!o.box_2d)return;const [y1,x1,y2,x2]=o.box_2d;const b=document.createElement('div');b.className='box'+(i===sel?' sel':'');Object.assign(b.style,{top:y1/10+'%',left:x1/10+'%',width:(x2-x1)/10+'%',height:(y2-y1)/10+'%'});b.innerHTML=`<span>${i+1}. ${esc(o.label)}</span>`;b.onclick=()=>choose(i);$('stage').appendChild(b);
+ }catch(e){if(ph!==PH)return;showErr($('st1'),e,()=>start(u),'Спробувати ще раз')}}
+// ---- photo selection: a click on the photo only SELECTS it (blue frame + × top-right); it never restarts anything. A click elsewhere clears the selection. × removes the photo. ----
+function selPhoto(on){$('stage').classList.toggle('selected',!!on)}
+$('stage').addEventListener('click',e=>{if(e.target.closest('.box')||e.target.closest('#xbtn'))return;selPhoto(true)});
+$('stage').addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();selPhoto(true)}});
+document.addEventListener('click',e=>{if(!e.target.closest('#stage'))selPhoto(false)});
+document.addEventListener('keydown',e=>{if(e.key==='Escape')selPhoto(false)});
+$('xbtn').addEventListener('click',e=>{e.stopPropagation();if((GEN.busy||PICKING)&&!confirm('Прибрати фото? Поточний процес буде скасовано.'))return;removePhoto()});
+function removePhoto(){PH++;PICKING=false;resetGen();IMG=null;DESC=null;SUBJ=null;window.ORIG=null;selPhoto(false);['sPrev','sDesc','sRes','sGen'].forEach(i=>$(i).classList.add('hide'));$('prev').removeAttribute('src');document.querySelectorAll('.box').forEach(b=>b.remove());$('chips').innerHTML='';$('st1').innerHTML='';$('desc').innerHTML='';$('res').innerHTML='';$('file').value='';toast('Фото прибрано.')}
+function drawBoxes(s,sel){s.forEach((o,i)=>{if(!o.box_2d)return;const [y1,x1,y2,x2]=o.box_2d;const b=document.createElement('div');b.className='box'+(i===sel?' sel':'');Object.assign(b.style,{top:y1/10+'%',left:x1/10+'%',width:(x2-x1)/10+'%',height:(y2-y1)/10+'%'});b.innerHTML=`<span>${i+1}. ${esc(o.label)}</span>`;b.onclick=e=>{e.stopPropagation();selPhoto(true);choose(i)};$('stage').appendChild(b);
  const c=document.createElement('div');c.className='chip'+(i===sel?' sel':'');c.textContent=`${i+1}. ${o.label}`;c.onclick=()=>choose(i);$('chips').appendChild(c)});
- window.choose=i=>{document.querySelectorAll('.box').forEach((b,j)=>b.classList.toggle('sel',j===i));document.querySelectorAll('.chip').forEach((b,j)=>b.classList.toggle('sel',j===i));pick(s[i])}}
+ window.choose=i=>{if(SUBJ===s[i])return;if(GEN.busy||PICKING){toast('Зачекай: поточний процес ще йде — він не перезапуститься.');return}document.querySelectorAll('.box').forEach((b,j)=>b.classList.toggle('sel',j===i));document.querySelectorAll('.chip').forEach((b,j)=>b.classList.toggle('sel',j===i));pick(s[i])}}
 const L={identity:'Персонаж/особа',type:'Тип',hair:'Волосся',headgear:'Головний убір',glasses:'Окуляри',face:'Обличчя',torso:'Тулуб/одяг',legs:'Ноги',accessories:'Аксесуари',theme:'Тема'};
-async function pick(s){resetGen();SUBJ=s;$('sDesc').classList.remove('hide');$('sRes').classList.add('hide');$('sGen').classList.add('hide');$('desc').innerHTML=spin('Аналізую деталі…');
- try{const {description}=await api('describe',{image:IMG,mime:MIME,subject:s},m=>$('desc').innerHTML=spin(esc(m)));DESC=description;
-  $('desc').innerHTML=`<p>${esc(description.summary_uk)}</p><dl>${Object.keys(L).filter(k=>description[k]&&description[k]!=='null').map(k=>`<dt>${L[k]}</dt><dd>${esc(description[k])}</dd>`).join('')}</dl>`;search()}catch(e){showErr($('desc'),e,()=>pick(s),'Спробувати ще раз')}}
+let PICKING=false;
+async function pick(s){const ph=PH;PICKING=true;resetGen();SUBJ=s;$('sDesc').classList.remove('hide');$('sRes').classList.add('hide');$('sGen').classList.add('hide');$('desc').innerHTML=spin('Аналізую деталі…');
+ try{const {description}=await api('describe',{image:IMG,mime:MIME,subject:s},m=>{if(ph===PH)$('desc').innerHTML=spin(esc(m))});if(ph!==PH)return;DESC=description;
+  $('desc').innerHTML=`<p>${esc(description.summary_uk)}</p><dl>${Object.keys(L).filter(k=>description[k]&&description[k]!=='null').map(k=>`<dt>${L[k]}</dt><dd>${esc(description[k])}</dd>`).join('')}</dl>`;search()}catch(e){if(ph===PH)showErr($('desc'),e,()=>pick(s),'Спробувати ще раз')}finally{if(ph===PH)PICKING=false}}
 const st=s=>s==='available'?'<span class="tag ok">Ймовірно у продажу</span>':s==='retired'?'<span class="tag ret">Знято з виробництва — лише вторинний ринок</span>':'<span class="tag unk">Статус невідомий</span>';
 const pv=v=>v&&v!=='null'?esc(v):'<span class="mut">невідомо</span>';
-async function search(){$('sRes').classList.remove('hide');$('res').innerHTML=spin('Шукаю реальні мініфігурки в каталозі Brickset/BrickLink… це може зайняти до хвилини');
- try{let crop=null;try{crop=await cropB64()}catch{}const r=await api('search',{description:DESC,crop},m=>$('res').innerHTML=spin(esc(m)));
+async function search(){const ph=PH;$('sRes').classList.remove('hide');$('res').innerHTML=spin('Шукаю реальні мініфігурки в каталозі Brickset/BrickLink… це може зайняти до хвилини');
+ try{let crop=null;try{crop=await cropB64()}catch{}const r=await api('search',{description:DESC,crop},m=>{if(ph===PH)$('res').innerHTML=spin(esc(m))});if(ph!==PH)return;
   if(!r.results.length){$('res').innerHTML='<p>Схожих мініфігурок не знайдено'+(r.message_uk?': '+esc(r.message_uk):'.')+' Створюю власну…</p>';return gen()}
   $('res').innerHTML=`<div class="grid">${r.results.map(x=>`<div class="res">${x.image?`<img src="${x.image}" loading="lazy">`:'<div class="mut" style="height:60px">Зображення не знайдено (номер не підтверджено в каталозі BrickLink)</div>'}
    <h3>${esc(x.name)} <span class="mut">${esc(x.fig_num)}</span></h3><div class="mut">Схожість: ${esc(x.similarity)}%</div><p>${esc(x.why_uk)}</p>
@@ -115,7 +126,7 @@ async function search(){$('sRes').classList.remove('hide');$('res').innerHTML=sp
    ${(x.sources||[]).length?`<div class="mut" style="margin-top:8px">Джерела: ${x.sources.map(s=>`<a href="${esc(s.url)}" target="_blank">${esc(s.title||'посилання')}</a>`).join(', ')}</div>`:''}</div>`).join('')}</div>
    <p class="mut">Дані каталогу, RRP та орієнтовна вартість — з Brickset (вартість на основі продажів BrickLink). Статус «у продажу/знято» визначено за датою виходу з продажу на Brickset; актуальну наявність перевіряйте на LEGO.com. «Невідомо» = даних немає. Перевірено ${esc(r.candidates_checked)} фігурок.</p>`;
   if(r.close_enough===false){$('res').insertAdjacentHTML('afterbegin','<p>Чесно: дуже схожих офіційних фігурок не знайдено (перевірено '+esc(r.candidates_checked)+', після фільтрів '+esc(r.after_filters??'?')+'). Нижче найближчі варіанти, а також генерую власну.</p>');gen()}
- }catch(e){showErr($('res'),e,search,'Шукати ще раз')}}
+ }catch(e){if(ph===PH)showErr($('res'),e,search,'Шукати ще раз')}}
 function cropB64(){return new Promise(res=>{const im=new Image();im.onload=()=>{let [y1,x1,y2,x2]=SUBJ&&SUBJ.box_2d?SUBJ.box_2d:[0,0,1000,1000];const py=(y2-y1)*.08,px=(x2-x1)*.08;y1=Math.max(0,y1-py);x1=Math.max(0,x1-px);y2=Math.min(1000,y2+py);x2=Math.min(1000,x2+px);
  const sx=x1/1000*im.width,sy=y1/1000*im.height,sw=(x2-x1)/1000*im.width,sh=(y2-y1)/1000*im.height;const k=Math.min(1,1024/Math.max(sw,sh),Math.max(1,320/Math.max(sw,sh)));const c=document.createElement('canvas');c.width=Math.round(sw*Math.max(k,1)*(k<1?k:1));c.height=Math.round(sh*Math.max(k,1)*(k<1?k:1));
  c.getContext('2d').drawImage(im,sx,sy,sw,sh,0,0,c.width,c.height);res(c.toDataURL('image/jpeg',.9).split(',')[1])};im.src=window.ORIG||('data:image/jpeg;base64,'+IMG)})}
@@ -142,8 +153,8 @@ async function gen(mode,opts={}){if(!DESC||GEN.busy)return;const ep=EPOCH;const 
   const lk=GEN.roles.length?'&locks='+encodeURIComponent(GEN.roles.join(',')):'';const vsrc=v3?v3+lk:null;
   $('genProg').innerHTML=r.locks_missing?'<div class="warnbox">⚠ Замочки не вдалося застосувати: попередня фігурка вже недоступна на сервері (він перезапускався). Згенеровано все заново — зафіксуй потрібні деталі ще раз.</div>':'';
   $('gen').innerHTML=`${v3?toolbarHTML(true)+(regen&&prevSig?diffHTML(prevSig,r.signature,GEN.roles):''):''}
-   ${v3?`<div id="v3wrap" style="margin-top:12px"><iframe id="v3" src="${esc(vsrc)}" title="3D мініфігурка" style="width:100%;height:100%;border:0;display:block" allow="fullscreen"></iframe></div>
-   <p class="mut">🧱 3D-мініфігурка з офіційних деталей LDraw — обертайте мишкою або пальцем, кнопки знизу: вигляд спереду/збоку/ззаду, автообертання, ⬇ PNG. <a target="_blank" href="${esc(vsrc)}">Відкрити на весь екран ↗</a></p><div id="facePanel"></div>`:`<img src="${u}" alt="Згенерована мініфігурка"><p class="mut">ℹ️ Це спрощений 2D-шаблон: тип ніг, капюшон і скульптурне волосся повністю видно лише в 3D.</p><div class="row actions" style="margin-top:10px"><a class="btn" download="lego-minifig.png" href="${u}">⬇ Зберегти PNG</a></div>`}
+   ${v3?`<div id="v3box"><div id="v3wrap"><iframe id="v3" src="${esc(vsrc)}" title="3D мініфігурка" style="width:100%;height:100%;border:0;display:block" allow="fullscreen"></iframe></div><div id="facePanel" aria-live="polite"></div></div>
+   <p class="mut">🧱 3D-мініфігурка з офіційних деталей LDraw — обертайте мишкою або пальцем, кнопки знизу: вигляд спереду/збоку/ззаду, автообертання, ⬇ PNG. <a target="_blank" href="${esc(vsrc)}">Відкрити на весь екран ↗</a></p><p class="mut">🙂 Наведи мишу або клікни на <b>голову</b> (в списку деталей справа чи на самій фігурці) — праворуч з'являться найпохожіші обличчя.</p>`:`<img src="${u}" alt="Згенерована мініфігурка"><p class="mut">ℹ️ Це спрощений 2D-шаблон: тип ніг, капюшон і скульптурне волосся повністю видно лише в 3D.</p><div class="row actions" style="margin-top:10px"><a class="btn" download="lego-minifig.png" href="${u}">⬇ Зберегти PNG</a></div>`}
    ${r.author_touch_uk?`<p><span class="tag ok">✍️ авторський штрих</span> ${esc(r.author_touch_uk)}</p>`:''}
    ${(r.qa_rules||[]).filter(x=>/^(обличчя|голова|волосся|торс|ноги)/.test(x)).length?`<p class="mut">🛡 Правила якості: ${(r.qa_rules||[]).filter(x=>/^(обличчя|голова|волосся|торс|ноги)/.test(x)).map(esc).join(' · ')}</p>`:''}
    <div class="row actions" style="margin-top:8px"><button class="btn blue" data-regen-btn data-needs-idle onclick="gen(null,{regen:true})">↻ Згенерувати ще раз</button><button class="btn" data-needs-idle onclick="gen('ai')">✨ Стилізований AI-варіант (повільно)</button></div>
@@ -156,7 +167,7 @@ async function gen(mode,opts={}){if(!DESC||GEN.busy)return;const ep=EPOCH;const 
    ${(r.alternatives||[]).length?`<h3>Інші варіанти</h3><div class="row">${r.alternatives.map(a=>`<div style="text-align:center"><img src="data:${a.mime};base64,${a.image}" style="width:150px;border-radius:8px;background:#1c2130"><div class="mut">${esc(a.score)}/10</div></div>`).join('')}</div>`:''}
    ${v3?`<details style="margin-top:12px"><summary class="mut">2D-ескіз (плоский шаблон, для порівняння)</summary><p class="mut">ℹ️ 2D-шаблон спрощений: він не показує тип ніг (спідниця/халат), капюшон і скульптурне волосся — повна форма видна в 3D вище.</p><img src="${u}" style="width:220px;border-radius:8px;background:#1c2130"> <a class="btn" download="lego-minifig-2d.png" href="${u}">⬇ 2D PNG</a></details>`:''}<details style="margin-top:12px"><summary class="mut">Специфікація / промпт і етапи</summary><pre class="mut" style="white-space:pre-wrap">${esc(r.prompt||JSON.stringify(r.spec,null,1))}</pre><pre class="mut" style="white-space:pre-wrap">${(r.steps||[]).map(esc).join('\n')}</pre></details>`;
   paintLockBar();
-  if(v3&&mode!=='ai'&&window.FacePicker)window.FacePicker.show(GEN.id);
+  if(v3&&mode!=='ai'&&window.FacePicker)window.FacePicker.setFigure(GEN.id);
   if(regen&&v3&&mode!=='ai')$('v3wrap').scrollIntoView({behavior:'smooth',block:'center'});
  }catch(e){if(ep!==EPOCH)return;$('genProg').innerHTML='';const tmp=document.createElement('div');showErr(tmp,e,()=>gen(mode,opts),'Спробувати ще раз');$('genProg').appendChild(tmp)}
  finally{if(ep===EPOCH)setBusy(false)}}

@@ -28,11 +28,26 @@ const desc = { hair: 'dirty blonde hair in a low bun, loose strands', face: 'you
   const parts = await fr().evaluate(() => window.PARTS.map(x => ({ id: x.id, color: x.color }))); const robe = parts.find(x => x.id === '36036'); ok(!!robe, 'long skirt part 36036 present'); if (robe) ok(!/f2cd37|fe8a18/i.test(String(robe.color)), 'long skirt part colour is not yellow/orange (' + robe.color + ')');
   await fr().evaluate(() => window.setView('front')); await p.waitForTimeout(500);
   // ---- face panel ----
-  await p.waitForSelector('#facePanel .fp-card', { timeout: 20000 }); const n = await p.locator('#facePanel .fp-card').count(); ok(n >= 4 && n <= 6, 'face panel shows 4–6 faces (' + n + ')');
+  // ---- the picker is a FLYOUT to the right of the 3D, next to the parts list; it opens only when the head is hovered / clicked ----
+  ok(await p.locator('#facePanel.open').count() === 0, 'face picker is closed until the head is hovered / clicked');
+  ok(await p.locator('#facePanel .fp-card').count() === 0, 'nothing is fetched before the first hover (lazy)');
+  await fr().locator('#plist .row', { hasText: 'Голова' }).first().hover();
+  await p.waitForSelector('#facePanel.open .fp-card', { timeout: 20000 });
+  { const pb = await p.locator('#facePanel').boundingBox(), fb = await p.locator('#v3').boundingBox(), vb = await p.locator('#v3box').boundingBox();
+    ok(pb.x >= fb.x && pb.x + pb.width <= fb.x + fb.width + 1 && pb.y >= fb.y - 1 && pb.y + pb.height <= fb.y + fb.height + 1, 'flyout sits inside the 3D screen area');
+    ok(Math.abs((pb.x + pb.width) - (fb.x + fb.width - 340)) < 24, 'flyout is directly beside the parts / locks list (right side), gap ' + Math.round((fb.x + fb.width - 340) - (pb.x + pb.width)) + 'px');
+    ok(pb.x + pb.width / 2 > fb.x + fb.width / 2, 'flyout is on the right half of the 3D screen'); void vb; }
+  await p.locator('#facePanel [data-fp-close]').click(); ok(await p.locator('#facePanel.open').count() === 0, '× closes the flyout');
+  { await p.locator('#v3box').scrollIntoViewIfNeeded(); await p.evaluate(() => window.scrollTo(0, document.getElementById('v3box').getBoundingClientRect().top + scrollY - 20)); await p.waitForTimeout(400); const hp = await fr().evaluate(() => window.headPoint()); ok(!!hp, 'head screen position known'); await p.mouse.move(5, 5);
+    const fb = await p.locator('#v3').boundingBox(); await p.mouse.move(fb.x + hp.x, fb.y + hp.y, { steps: 4 }); await p.mouse.down(); await p.mouse.up();
+    await p.waitForSelector('#facePanel.open .fp-card', { timeout: 20000 }); ok(true, 'clicking the head ON THE 3D figure opens the flyout'); }
+  await p.waitForTimeout(600); await p.keyboard.press('Escape'); await p.waitForTimeout(300); ok(await p.locator('#facePanel.open').count() === 0, 'Esc closes the flyout');
+  await fr().locator('#plist .row', { hasText: 'Голова' }).first().click(); await p.waitForSelector('#facePanel.open .fp-card', { timeout: 20000 });
+  const n = await p.locator('#facePanel .fp-card').count(); ok(n >= 4 && n <= 6, 'face panel shows 4–6 faces (' + n + ')');
   const labels = await p.locator('#facePanel .fp-label').allTextContents(); ok(new Set(labels).size >= 4, 'distinct labels: ' + labels.slice(0, 3).join(' | ') + ' …');
   const imgsOk = await p.evaluate(() => [...document.querySelectorAll('#facePanel img')].every(i => i.complete && i.naturalWidth > 20)); ok(imgsOk, 'all face thumbnails loaded');
   ok(await p.locator('#facePanel [data-pick]').count() === n && /Обрати/.test(await p.locator('#facePanel [data-pick]').first().textContent()), '«Обрати» button on every card');
-  ok(h.st.calls === calls0, 'face panel needs NO Gemini call'); await p.locator('#sGen').scrollIntoViewIfNeeded(); await p.screenshot({ path: OUT + '/faces_panel_page.png', fullPage: false });
+  ok(h.st.calls === calls0, 'face panel needs NO Gemini call'); await p.locator('#v3box').scrollIntoViewIfNeeded(); await p.screenshot({ path: OUT + '/faces_panel_page.png', fullPage: false });
   await p.locator('#facePanel').screenshot({ path: OUT + '/faces_panel.png' });
   // ---- pick the 2nd face ----
   const part = await p.locator('#facePanel [data-pick]').nth(1).getAttribute('data-pick'); await p.locator('#facePanel [data-pick]').nth(1).click();
@@ -53,7 +68,7 @@ const desc = { hair: 'dirty blonde hair in a low bun, loose strands', face: 'you
   // ---- regeneration keeps the chosen head (locked) ----
   await p.click('.toolbar [data-regen-btn]'); await p.waitForFunction(id => { const f = document.getElementById('v3'); return f && !f.src.includes(id); }, id1, { timeout: 90000 }); await ready();
   const id2 = (await p.getAttribute('#v3', 'src')).match(/id=([^&]+)/)[1]; const spec3 = await (await fetch(h.base + '/out/' + id2 + '.json')).json(); ok(spec3.head_part === part, 'regeneration keeps the chosen (locked) head');
-  await p.waitForSelector('#facePanel .fp-card', { timeout: 20000 }); ok(await p.locator('#facePanel .fp-card').count() >= 4, 'face panel re-appears for the new figure');
+  ok(await p.locator('#facePanel.open').count() === 0, 'new figure: flyout closed again'); await fr().locator('#plist .row', { hasText: 'Голова' }).first().hover(); await p.waitForSelector('#facePanel.open .fp-card', { timeout: 20000 }); ok(await p.locator('#facePanel .fp-card').count() >= 4, 'face panel re-appears for the new figure on head hover');
   // ---- screenshots before / after of the fixes (3D viewer, front) ----
   const v = await b.newPage({ viewport: { width: 700, height: 820 } }); await v.goto(h.base + '/viewer3d.html');
   const shot = async (spec, file) => { spec.textures = minifig.textures(spec); await v.evaluate(s => window.rebuild(s), spec); await v.waitForFunction(() => window.READY === true, null, { timeout: 120000 }); await v.evaluate(() => window.setView && window.setView('front')); await v.waitForTimeout(900); await v.screenshot({ path: file }); };

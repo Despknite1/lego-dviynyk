@@ -54,4 +54,16 @@ ok(a.face.gender === 'neutral' && a.bust === undefined && a.bust_size === undefi
 ok(a.accessories_3d.length === 0 && a.legs_type === 'standard', 'tiger: no weapons/bags, ordinary legs');
 ok(/тварин/i.test(a.animal_note_uk), 'tiger: Ukrainian note says it is an animal');
 ok(minifig.renderSvg(a).length > 1000, 'animal spec renders');
+// ---- legs foreground test: leaf/twig spots in front of DARK trousers are dropped, a REAL mirrored print survives ----
+{
+  const dark = '#1B2A34';
+  const leaf = "<circle cx='20' cy='55' r='4' fill='#4B9F4A'/><rect x='62' y='40' width='6' height='5' fill='#582A12'/>"; // one green + one brown spot, no mirror twin
+  const r1 = tidyPrint(leaf, dark, 'legs', { occluders: true }); ok(!/4B9F4A/i.test(r1.svg) && !/582A12/i.test(r1.svg), 'unpaired green/brown spots on dark trousers => foreground, dropped');
+  const real = "<circle cx='20' cy='55' r='4' fill='#4B9F4A'/><circle cx='80' cy='55' r='4' fill='#4B9F4A'/>"; // mirrored on both legs
+  const r2 = tidyPrint(real, dark, 'legs', { occluders: true }); ok((r2.svg.match(/4B9F4A/gi) || []).length === 2, 'mirrored (both legs) green print survives');
+  const r3 = tidyPrint(leaf, dark, 'legs', { occluders: false }); ok(/4B9F4A/i.test(r3.svg), 'no occluders in the photo => rule does not touch the print');
+  const r4 = tidyPrint("<circle cx='20' cy='55' r='4' fill='#4B9F4A'/>", '#237841', 'legs', { occluders: true }); ok(/4B9F4A/i.test(r4.svg), 'green trousers keep their own green spots (same colour family as the cloth)');
+  const sp2 = mk(); sp2.inspection = Object.assign({}, sp2.inspection, { legs_print_evidence: 'uncertain', occluders: '' }); sp2.leg_color = dark; sp2.legs_print_svg = leaf;
+  const o2 = sanitizeSpec(sp2, { legs: 'dark trousers' }); ok(!/4B9F4A/i.test(o2.legs_print_svg || ''), 'model says legs_print_evidence=uncertain => foreground spots dropped even without leaf words');
+}
 console.log(`${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);
