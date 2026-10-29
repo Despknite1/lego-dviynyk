@@ -11,7 +11,7 @@ async function start({ port = 8812, fakePort = 8813, spec = SP } = {}) {
     else out = st.spec; // the "model" keeps returning the SAME spec (worst case): the exclude list alone must create variety
     res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify(out) }] } }] })); }); });
   await new Promise(r => fake.listen(fakePort, r));
-  const srv = spawn('node', ['server.js'], { cwd: path.join(__dirname, '../..'), env: { ...process.env, PORT: port, GEMINI_API_KEY: 'fake-key', RATE_PER_IP: '1000', GEMINI_BASE_URL: `http://localhost:${fakePort}` }, stdio: ['ignore', 'ignore', process.env.TEST_VERBOSE ? 'inherit' : 'ignore'] });
+  const srv = spawn('node', ['server.js'], { cwd: path.join(__dirname, '../..'), env: { ...process.env, PORT: port, GEMINI_API_KEY: 'fake-key', RATE_PER_IP: '1000', SQLITE_PATH: process.env.SQLITE_PATH || require('os').tmpdir() + '/lego-test-' + port + '-' + Date.now() + '.sqlite', GEMINI_BASE_URL: `http://localhost:${fakePort}` }, stdio: ['ignore', 'ignore', process.env.TEST_VERBOSE ? 'inherit' : 'ignore'] });
   for (let i = 0; i < 60; i++) { try { if ((await fetch(`http://localhost:${port}/healthz`)).ok) break; } catch {} await new Promise(z => setTimeout(z, 300)); }
   const base = `http://localhost:${port}`;
   const J = async (p, body) => { const r = await fetch(base + p, { method: body ? 'POST' : 'GET', headers: { 'content-type': 'application/json' }, body: body ? JSON.stringify(body) : undefined }); return r.json(); };

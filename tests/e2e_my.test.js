@@ -1,0 +1,33 @@
+// node tests/e2e_my.test.js — «Мої фігурки» API end-to-end on FAKE Gemini: cookie identity, versions from generate/regenerate/face pick, revert, delete, CSRF, owner isolation.
+const sharp = require('sharp'); const H = require('./helpers/harness');
+let pass = 0, fail = 0; const ok = (c, n) => { c ? pass++ : fail++; console.log((c ? 'PASS ' : 'FAIL ') + n); };
+(async () => {
+  const h = await H.start({ port: 8832, fakePort: 8833 });
+  const client = () => { const jar = {}; const f = async (p, { method = 'GET', body, headers = {} } = {}) => { const r = await fetch(h.base + p, { method, headers: { 'content-type': 'application/json', cookie: Object.entries(jar).map(([k, v]) => k + '=' + v).join('; '), ...headers }, body: body ? JSON.stringify(body) : undefined });
+    for (const c of r.headers.getSetCookie()) { const [kv] = c.split(';'); const i = kv.indexOf('='); jar[kv.slice(0, i)] = kv.slice(i + 1); } let j = null; try { j = await r.json(); } catch {} return { s: r.status, j }; };
+    f.jar = jar; f.run = async (ep, body) => { const { j } = await f('/api/' + ep, { method: 'POST', body }); for (let i = 0; i < 120; i++) { await new Promise(z => setTimeout(z, 500)); const s = (await f('/job/' + j.job)).j; if (s.status !== 'pending') return s; } }; return f; };
+  const A = client(), Bc = client();
+  const crop = (await sharp({ create: { width: 64, height: 64, channels: 3, background: '#888' } }).jpeg().toBuffer()).toString('base64'); const base = { crop, subject: { label: 'x' }, description: { summary_uk: 'тест', attrs: { gender: 'male' } } };
+  ok((await A('/api/my/figures')).j.figures.length === 0, 'no identity yet -> empty list');
+  const g1 = await A.run('generate', { ...base, __owner: 'f'.repeat(64) }); ok(g1.status === 'done' && g1.result.my && g1.result.my.version === 1, 'generation creates figure v1');
+  ok(!!A.jar.anon && A.jar.anon.length === 43, 'httpOnly identity cookie set');
+  const id1 = g1.result.viewer3d.split('id=')[1], fid = g1.result.my.figure_id;
+  const g2 = await A.run('generate', { ...base, prev_id: id1, history: [g1.result.signature] }); ok(g2.result.my && g2.result.my.figure_id === fid && g2.result.my.version === 2, 'regeneration adds v2 to the same figure');
+  const id2 = g2.result.viewer3d.split('id=')[1];
+  const fo = await A('/api/face-options', { method: 'POST', body: { id: id2 } }); const part = fo.j.options && fo.j.options.find(o => !o.current);
+  if (part) { const fa = await A('/api/face-apply', { method: 'POST', body: { id: id2, part: part.part || part.id } }); ok(fa.j.ok && fa.j.my && fa.j.my.version === 3, 'face pick adds v3'); } else ok(true, 'face pick: no options for fixture (skipped)');
+  let L = (await A('/api/my/figures')).j; ok(L.figures.length === 1 && L.figures[0].photo_thumb && L.figures[0].png_thumb && L.persistent === false, 'list: 1 figure with photo + figure thumbs, persistent=false (SQLite)');
+  const meta = await sharp(Buffer.from(L.figures[0].photo_thumb, 'base64')).metadata(); ok(meta.format === 'webp' && meta.width <= 160 && !meta.exif, 'photo thumb: small webp, no EXIF');
+  const D = (await A('/api/my/figures/' + fid)).j.figure; ok(D.versions.length >= 2 && D.versions[1].reason === 'regenerate' && !('owner_hash' in D) && !D.versions[0].spec, 'detail: versions timeline, no owner hash / spec leak');
+  ok((await A('/api/my/figures/' + fid + '/revert', { method: 'POST', body: { version: 1 } })).s === 403, 'revert without CSRF -> 403');
+  const { j: c } = await A('/api/my/csrf'); const H1 = { 'x-csrf-token': c.csrf };
+  ok((await A('/api/my/figures/' + fid + '/revert', { method: 'POST', body: { version: 1 }, headers: { ...H1, origin: 'https://evil.example' } })).s === 403, 'foreign Origin -> 403');
+  const rv = await A('/api/my/figures/' + fid + '/revert', { method: 'POST', body: { version: 1 }, headers: H1 }); ok(rv.s === 200 && rv.j.version === 1 && /viewer3d\.html\?id=/.test(rv.j.viewer3d), 'revert to v1 returns a 3D viewer url');
+  const spec = (await A('/out/' + rv.j.out_id + '.json')).j; ok(spec && spec.textures, 'reverted spec is loadable by the 3D viewer');
+  ok((await A('/api/my/figures/' + fid)).j.figure.current_version === 1, 'current_version = 1 after revert');
+  await Bc('/api/my/csrf'); const { j: c2 } = await Bc('/api/my/csrf');
+  ok((await Bc('/api/my/figures/' + fid)).s === 404 && (await Bc('/api/my/figures/' + fid, { method: 'DELETE', headers: { 'x-csrf-token': c2.csrf } })).s === 404 && (await Bc('/api/my/figures')).j.figures.length === 0, 'another browser cannot see / delete the figure');
+  ok((await A('/api/my/figures/../../etc')).s === 404 && (await A('/api/my/figures/x', { method: 'DELETE', headers: H1 })).s === 404, 'bad ids -> 404');
+  ok((await A('/api/my/figures/' + fid, { method: 'DELETE', headers: H1 })).j.ok && (await A('/api/my/figures')).j.figures.length === 0, 'delete works');
+  console.log(`${pass} passed, ${fail} failed (fake Gemini calls: ${h.st.calls})`); h.stop(); process.exit(fail ? 1 : 0);
+})().catch(e => { console.error(e); process.exit(1); });

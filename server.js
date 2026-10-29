@@ -15,7 +15,7 @@ app.use(helmet({
 app.use(require('compression')({ threshold: 1024 })); // gzip text/js/json/svg (three.module.js 1.3 MB -> ~0.3 MB); PNG/JPEG are skipped automatically
 app.use(require('cookie-parser')());
 app.use('/auth', require('./lib/sec/auth').router());
-app.get('/config.json', (req, res) => res.json({ accounts: require('./lib/sec/auth').enabled(), email_reset: require('./lib/sec/mailer').emailReady(), sms_reset: require('./lib/sec/mailer').smsReady() }));
+app.get('/config.json', (req, res) => res.json({ figures: process.env.FIGURES_ENABLED !== 'false', figures_persistent: !!process.env.DATABASE_URL, accounts: require('./lib/sec/auth').enabled(), email_reset: require('./lib/sec/mailer').emailReady(), sms_reset: require('./lib/sec/mailer').smsReady() }));
 app.use('/api', express.json({ limit: '15mb' }));
 app.use(['/api/detect', '/api/describe', '/api/search', '/api/generate', '/api/generate_ai'], require('./lib/sec/upload').middleware(['image', 'crop']));
 // face thumbnails never change for a given part id: cache a week. HTML/JS/CSS stay revalidated (ETag => 304) so a deploy is visible immediately.
@@ -27,10 +27,15 @@ const ldpack = require('./lib/ldpack');
 app.use('/ldraw/lib', (req, res, next) => { req.url = req.url.toLowerCase(); next(); }, express.static(process.env.LDRAW_DIR || '/workspace/ldraw/ldraw', { maxAge: '7d', fallthrough: false }));
 app.get('/ldraw/packed/:part.mpd', (req, res) => { try { res.type('text/plain').set('Cache-Control', 'public, max-age=604800').send(ldpack.pack(req.params.part)); } catch (e) { res.status(404).send(e.message); } });
 
+// ---- "Мої фігурки": anonymous figure history (lib/my), own limiter + CSRF; FIGURES_ENABLED=false disables ----
+const myFigs = require('./lib/my/router'), myId = require('./lib/my/identity');
+app.use('/api/my', myFigs.router({ outDir: __dirname + '/out', materialize: async sp => { const fs = require('fs'), outDir = __dirname + '/out'; fs.mkdirSync(outDir, { recursive: true }); const f = Date.now() + '-' + Math.random().toString(36).slice(2, 6); const s = { ...sp }; try { s.textures = minifig.textures({ ...s, textures: undefined }); } catch (e) { log('my tex', e.message); } fs.writeFileSync(`${outDir}/${f}.json`, JSON.stringify(s)); try { fs.writeFileSync(`${outDir}/${f}.png`, minifig.renderPng(s).png); } catch {} return f; } }));
+app.use(['/api/generate', '/api/face-apply'], (req, res, next) => { if (req.body && typeof req.body === 'object') { delete req.body.__owner; if (myFigs.enabled() && req.method === 'POST') try { req.body.__owner = myId.owner(req, res, true); } catch {} } next(); });
+if (myFigs.enabled()) require('./lib/my/store').db().catch(e => logger.error({ evt: 'db.init', err: e.message }));
 // rate limit: per IP 20 req / 10 min, global 300/day
 const hits = new Map(); let day = { d: new Date().toDateString(), n: 0 };
 app.use('/api', (req, res, next) => {
-  if (/^\/face-(options|apply)\/?$/.test(req.path)) return next(); // cheap, Gemini-free endpoints have their own limiter (below)
+  if (/^\/face-(options|apply)\/?$/.test(req.path) || /^\/my\//.test(req.path)) return next(); // cheap, Gemini-free endpoints have their own limiter (below)
   const ip = req.ip; const now = Date.now();
   const arr = (hits.get(ip) || []).filter(t => now - t < 600000);
   if (new Date().toDateString() !== day.d) day = { d: new Date().toDateString(), n: 0 };
@@ -610,9 +615,9 @@ app.post('/api/face-apply', faceLimit, (req, res) => {
     const r = faceopts.applyFace(sp, b.part, FACE_CAT, faceCtx(sp)); if (!r) return res.status(400).json({ error: 'Це обличчя не можна застосувати' });
     try { sp.textures = minifig.textures({ ...sp, textures: undefined }); } catch (e) { log('face-apply tex', e.message); }
     const f = __dirname + '/out/' + b.id; require('fs').writeFileSync(f + '.json.tmp', JSON.stringify(sp)); require('fs').renameSync(f + '.json.tmp', f + '.json'); try { require('fs').writeFileSync(f + '.png', minifig.renderPng(sp).png); } catch {}
-    res.json({ ok: true, spec: sp, head: { id: r.head.part, title: r.head.title }, signature: regen.signature(sp), roles_locked: ['Голова'] });
+    myFigs.record(b.__owner, { reason: 'face_pick', spec: sp, png: (() => { try { return require('fs').readFileSync(f + '.png'); } catch { return null; } })(), outId: b.id, prevOutId: b.id }).then(my => res.json({ ok: true, my, spec: sp, head: { id: r.head.part, title: r.head.title }, signature: regen.signature(sp), roles_locked: ['Голова'] }));
   } catch (e) { res.status(500).json({ error: 'Не вдалося застосувати обличчя' }); log('face-apply', e.message); } });
-app.post('/api/generate', wrap(async ({ image, mime, crop, subject, description, lock_from, locked_roles, prev_id, history }, stage = () => {}) => {
+app.post('/api/generate', wrap(async ({ image, mime, crop, subject, description, lock_from, locked_roles, prev_id, history, __owner }, stage = () => {}) => {
   const LK = lockedFields(lock_from || prev_id, locked_roles), FIXED = LK.fixed, LOCKED = LK.roles;
   // regeneration = the user already saw a figure (prev_id): every UNLOCKED role must come out different (exclude list = signatures of earlier figures)
   const prevSpec = ID_RE.test(prev_id || '') ? readOut(prev_id) : null;
@@ -718,7 +723,8 @@ ${SPEC_DOC}` }] }], generationConfig: { responseMimeType: 'application/json', te
   const fs = require('fs'); const outDir = __dirname + '/out'; fs.mkdirSync(outDir, { recursive: true });
   const fname = Date.now() + '-' + Math.random().toString(36).slice(2, 6); fs.writeFileSync(`${outDir}/${fname}.png`, final.png);
   try { const fs3 = { ...(spec2 || spec) }; fs3.textures = minifig.textures(fs3); fs.writeFileSync(`${outDir}/${fname}.json`, JSON.stringify(fs3)); } catch (e) { log('tex fail', e.message); }
-  return { image: final.png.toString('base64'), mime: 'image/png', first_render: spec2 ? r1.png.toString('base64') : null, source: 'Шаблонний рендер (пропорції класичної мініфігурки) + специфікація Gemini',
+  let my = null; try { const fsp = JSON.parse(fs.readFileSync(`${outDir}/${fname}.json`, 'utf8')); my = await myFigs.record(__owner, { reason: prevSpec ? 'regenerate' : 'generate', spec: fsp, png: final.png, crop: cr.data, outId: fname, prevOutId: ID_RE.test(prev_id || '') ? prev_id : null, title: fsp.identity || id.identity || (description && description.summary_uk) || 'Фігурка' }); } catch (e) { log('my record', e.message); }
+  return { my, image: final.png.toString('base64'), mime: 'image/png', first_render: spec2 ? r1.png.toString('base64') : null, source: 'Шаблонний рендер (пропорції класичної мініфігурки) + специфікація Gemini',
     spec: { ...(spec2 || spec), torso_graphic_png: (spec2 || spec).torso_graphic_png ? '(PNG з фото)' : undefined }, verdict, author_touch_uk: (spec2 || spec).author_touch_uk, identity: (spec2 || spec).identity || id.identity, identity_confirmed: usedRefs.length > 0, checklist: spec.checklist, references: usedRefs, references_rejected: refs.filter((r, i) => !matching.includes(i + 1)).map(({ b, ...r }) => r),
     appearance_uk: { 'Шкіра': (spec2 || spec).skin_color, 'Зачіска': `${(spec2 || spec).hair_style} ${(spec2 || spec).hair_color}`, 'Тулуб': (spec2 || spec).torso_color, 'Руки': `${(spec2 || spec).arm_color} / кисті ${(spec2 || spec).hand_color}`, 'Ноги': (spec2 || spec).leg_color, 'Аксесуари': (spec2 || spec).accessories_uk, 'Авторський штрих': (spec2 || spec).author_touch_uk, 'Офіційний друк обличчя': (spec2 || spec).head_part ? `${(spec2 || spec).head_part} — ${(spec2 || spec).head_part_title}` : 'намальоване обличчя (запасний варіант)', 'Примітки': (spec2 || spec).notes_uk },
     steps, seconds: +((Date.now() - T0) / 1000).toFixed(1), score: verdict?.score ?? null, qa_rules: (spec2 || spec)._qa || [], signature: regen.signature(spec2 || spec), regenerated: REGEN, locks_applied: LOCKED, locks_missing: LK.missing, file: `out/${fname}.png`, viewer3d: `/viewer3d.html?id=${fname}` };

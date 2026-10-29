@@ -166,11 +166,11 @@ async function gen(mode,opts={}){if(!DESC||GEN.busy)return;const ep=EPOCH;const 
    ${(r.references_rejected||[]).length?`<p class="mut">Відхилено ${r.references_rejected.length} референс(и) — інше зображення/версія персонажа: ${r.references_rejected.map(x=>`<a href="${esc(x.url)}" target="_blank">${esc(x.title)}</a>`).join(', ')}</p>`:''}
    ${(r.alternatives||[]).length?`<h3>Інші варіанти</h3><div class="row">${r.alternatives.map(a=>`<div style="text-align:center"><img src="data:${a.mime};base64,${a.image}" style="width:150px;border-radius:8px;background:#1c2130"><div class="mut">${esc(a.score)}/10</div></div>`).join('')}</div>`:''}
    ${v3?`<details style="margin-top:12px"><summary class="mut">2D-ескіз (плоский шаблон, для порівняння)</summary><p class="mut">ℹ️ 2D-шаблон спрощений: він не показує тип ніг (спідниця/халат), капюшон і скульптурне волосся — повна форма видна в 3D вище.</p><img src="${u}" style="width:220px;border-radius:8px;background:#1c2130"> <a class="btn" download="lego-minifig-2d.png" href="${u}">⬇ 2D PNG</a></details>`:''}<details style="margin-top:12px"><summary class="mut">Специфікація / промпт і етапи</summary><pre class="mut" style="white-space:pre-wrap">${esc(r.prompt||JSON.stringify(r.spec,null,1))}</pre><pre class="mut" style="white-space:pre-wrap">${(r.steps||[]).map(esc).join('\n')}</pre></details>`;
-  paintLockBar();
+  paintLockBar();if(window.MyFigs&&mode!=='ai')try{window.MyFigs.afterGen(r)}catch{}
   if(v3&&mode!=='ai'&&window.FacePicker)window.FacePicker.setFigure(GEN.id);
   if(regen&&v3&&mode!=='ai')$('v3wrap').scrollIntoView({behavior:'smooth',block:'center'});
  }catch(e){if(ep!==EPOCH)return;$('genProg').innerHTML='';const tmp=document.createElement('div');showErr(tmp,e,()=>gen(mode,opts),'Спробувати ще раз');$('genProg').appendChild(tmp)}
  finally{if(ep===EPOCH)setBusy(false)}}
 $('genBtn').onclick=()=>gen();
-</script><script src="/face_picker.js" defer></script><script src="/account.js" defer></script>
+</script><script src="/face_picker.js" defer></script><script src="/account.js" defer></script><script src="/my_figures.js" defer></script>
 </body></html>
