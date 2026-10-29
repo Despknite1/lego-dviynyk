@@ -1,6 +1,6 @@
-// Бокова панель «Найпохожіші обличчя» поруч із 3D-переглядачем (відкривається при наведенні/кліку на голову).
-// "Найпохожіші обличчя": a flyout to the RIGHT of the 3D screen (next to the parts / locks list). It opens when the user hovers or clicks the head
-// (row «Голова» in the parts list or the head on the 3D figure; the viewer iframe posts {lego_head}) — it is no longer a separate block below.
+// Бокова панель «Найпохожіші обличчя» поруч із 3D-переглядачем (відкривається ЛИШЕ з рядка «Голова» у списку деталей справа).
+// "Найпохожіші обличчя": a side panel to the RIGHT of the 3D screen (its own column, the viewer shrinks — nothing overlaps the figure). Opens ONLY from the head
+// (row «Голова» / button 🙂 in the parts list; the viewer iframe posts {lego_head}). Clicks on the 3D figure itself never open it. — it is no longer a separate block below.
 // Shows 4–6 of the closest SAFE official faces (POST /api/face-options, no Gemini),
 // «Обрати» applies the face (POST /api/face-apply), locks the head (🔒 Голова) and rebuilds the 3D figure in the viewer iframe.
 window.FacePicker = (() => {
@@ -10,7 +10,7 @@ window.FacePicker = (() => {
   const msg = t => { const m = $('fpMsg'); if (m) m.textContent = t || ''; };
   function card(o) {
     const sel = o.part === chosen;
-    return `<div class="fp-card${sel ? ' sel' : ''}" data-face="${esc(o.part)}"><img src="${esc(o.thumb)}" alt="${esc(o.title)}" loading="lazy" width="96" height="96"><div class="fp-label">${esc(o.label)}</div><span class="fp-score" title="Наскільки обличчя схоже на твоє за статтю / віком / виразом / окулярами / бровами">схожість ${o.score}%</span><button type="button" class="btn${sel ? '' : ' blue'}" data-pick="${esc(o.part)}" ${busy ? 'disabled' : ''}>${sel ? '✓ Обрано' : 'Обрати'}</button></div>`;
+    return `<div class="fp-card${sel ? ' sel' : ''}" data-face="${esc(o.part)}"><img src="${esc(o.thumb)}" alt="${esc(o.title)}" loading="lazy" decoding="async" width="96" height="96"><div class="fp-label">${esc(o.label)}</div><span class="fp-score" title="Наскільки обличчя схоже на твоє за статтю / віком / виразом / окулярами / бровами">схожість ${o.score}%</span><button type="button" class="btn${sel ? '' : ' blue'}" data-pick="${esc(o.part)}" ${busy ? 'disabled' : ''}>${sel ? '✓ Обрано' : 'Обрати'}</button></div>`;
   }
   function paint(list, note) {
     const el = $('facePanel'); if (!el) return;
@@ -22,7 +22,8 @@ window.FacePicker = (() => {
   }
   const head = () => '<div class="fp-head"><h3>🙂 Найпохожіші обличчя</h3><button type="button" class="fp-x" data-fp-close aria-label="Закрити" title="Закрити (Esc)">×</button></div>';
   const isOpen = () => { const el = $('facePanel'); return !!(el && el.classList.contains('open')); };
-  function close() { const el = $('facePanel'); if (el) el.classList.remove('open'); }
+  let closedAt = 0; // після закриття ширина 3D змінюється, і рядок «Голова» може «наїхати» під нерухомий курсор — не відкриваємо панель знову від такого наведення
+  function close() { const el = $('facePanel'); if (el) el.classList.remove('open'); closedAt = Date.now(); }
   // a new figure: forget the old list, close the flyout (lazy: nothing is fetched until the head is hovered / clicked)
   function setFigure(id) { figId = id || null; chosen = null; token++; loaded = false; loading = false; busy = false; const el = $('facePanel'); if (el) { el.classList.remove('open'); el.innerHTML = ''; el._list = null; } }
   async function load(n) {
@@ -38,7 +39,7 @@ window.FacePicker = (() => {
     if (!loaded && !loading) load(); else if (!was && matchMedia('(max-width:760px)').matches) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
   const show = (id, opts = {}) => { setFigure(id); open(); };
-  addEventListener('message', e => { if (e.origin !== location.origin || !e.data || !e.data.lego_head) return; const v = e.data.lego_head; if (!v || v.id !== figId) return; if (v.open) open(); else close(); });
+  addEventListener('message', e => { if (e.origin !== location.origin || !e.data || !e.data.lego_head) return; const v = e.data.lego_head; if (!v || v.id !== figId) return; if (v.open) { if (v.src === 'row' && Date.now() - closedAt < 900) return; open(); } else close(); });
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && isOpen()) close(); });
   const waitReady = async (f, ms = 90000) => { const t0 = Date.now(); await new Promise(z => setTimeout(z, 60)); while (Date.now() - t0 < ms) { const w = f.contentWindow; if (w && w.READY === true) return true; if (w && w.READY === 'error') return false; await new Promise(z => setTimeout(z, 150)); } return false; };
   async function pick(part) {

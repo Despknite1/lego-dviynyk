@@ -61,6 +61,42 @@ dl{display:grid;grid-template-columns:150px 1fr;gap:6px 12px;margin:0}dt{color:v
 .diff{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-wrap:wrap;gap:6px}.diff li{font-size:13px;background:#1c2130;border:1px solid var(--line);border-radius:999px;padding:4px 10px}
 #toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%) translateY(30px);background:#232836;border:1px solid var(--yel);color:var(--txt);padding:11px 18px;border-radius:12px;box-shadow:0 10px 30px #000a;opacity:0;transition:.25s;z-index:99;max-width:min(92vw,520px);text-align:center;pointer-events:none}#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 #v3wrap{width:100%;height:min(82vh,720px);min-height:460px;border-radius:14px;overflow:hidden;background:#0b0d13;border:1px solid #2a2f3c;box-shadow:0 12px 34px #0008}
+/* === ТОНКІ ТЕМНІ СМУГИ ПРОКРУТКИ (одна на контейнер, без вкладених) та плавна прокрутка === */
+html{scroll-behavior:smooth;scrollbar-width:thin;scrollbar-color:#3a4258 #0b0d13}*{scrollbar-width:thin;scrollbar-color:#3a4258 transparent}
+::-webkit-scrollbar{width:8px;height:8px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:#3a4258;border-radius:8px}::-webkit-scrollbar-thumb:hover{background:#4b5570}
+html.noscroll{overflow:hidden}
+/* === РОБОЧИЙ ЕКРАН на всю ширину: фото+опис | 3D (великий) + деталі. Секції поза екраном не малюються (content-visibility) === */
+main{max-width:1760px}
+#sRes{content-visibility:auto;contain-intrinsic-size:auto 900px}
+@media(min-width:1100px){
+ main:has(#sGen:not(.hide)){display:grid;grid-template-columns:minmax(260px,330px) minmax(0,1fr);column-gap:20px;align-items:start}
+ main:has(#sGen:not(.hide))>#drop,main:has(#sGen:not(.hide))>#sRes{grid-column:1/-1}
+ main:has(#sGen:not(.hide))>#sPrev{grid-column:1;grid-row:2}
+ main:has(#sGen:not(.hide))>#sDesc{grid-column:1;grid-row:3}
+ main:has(#sGen:not(.hide))>#sGen{grid-column:2;grid-row:2/span 3}
+ main:has(#sGen:not(.hide))>#sRes{grid-row:5}
+ main:has(#sGen:not(.hide)) #sPrev .stage img{max-height:360px}
+ main:has(#sGen:not(.hide)) #sDesc dl{grid-template-columns:1fr;gap:0}main:has(#sGen:not(.hide)) #sDesc dt{margin-top:6px}
+ main:has(#sGen:not(.hide)) #sDesc .btn{width:100%}
+ #v3wrap{height:calc(100vh - 150px);max-height:860px;min-height:560px}
+ main:has(#sGen:not(.hide))>#drop{padding:12px 18px;margin-top:0;border-width:2px}main:has(#sGen:not(.hide))>#drop h2{font-size:15px;margin:0}main:has(#sGen:not(.hide))>#drop p{display:none}
+ main:has(#sGen:not(.hide)) section{margin-top:14px}
+}
+@media(min-width:1100px) and (max-width:1499px){main:has(#sGen:not(.hide)){grid-template-columns:250px minmax(0,1fr)}}
+/* === ВАРІАНТИ фігурки (усі генерації з одного фото) — картки поруч === */
+#variants:empty{display:none}#variants{margin:0 0 12px}
+.vHead{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px}.vHead h3{margin:0;font-size:15px}.vHead .grow{flex:1}
+.vStrip{display:grid;grid-template-columns:repeat(auto-fill,minmax(78px,1fr));gap:8px}
+.vCard{background:#12151d;border:2px solid var(--line);border-radius:12px;padding:3px;cursor:pointer;color:inherit;font:11px system-ui;text-align:center;transition:border-color .15s}
+.vCard:hover{border-color:var(--yel)}.vCard.sel{border-color:var(--blue);background:#14203a}.vCard img{width:100%;aspect-ratio:1;object-fit:contain;display:block;border-radius:8px;background:#0e1015}
+.vCard .mfNo{aspect-ratio:1;display:flex;align-items:center;justify-content:center;color:#555}
+.btn.sm{padding:7px 12px;font-size:13px;box-shadow:0 3px 0 #11141b}
+/* === МОДАЛЬНЕ ВІКНО «Перегенерувати деталі» === */
+.modal{position:fixed;inset:0;background:#000b;z-index:80;display:flex;align-items:center;justify-content:center;padding:16px}
+.modal .mb{background:#12151d;border:1px solid var(--line);border-top:4px solid var(--blue);border-radius:16px;padding:18px 20px;width:min(520px,96vw);max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px #000c}
+.modal h3{margin:0 0 6px;color:var(--yel)}.plk{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0}
+.plk label{display:flex;gap:8px;align-items:center;background:#1a1e2a;border:1px solid var(--line);border-radius:10px;padding:9px 10px;cursor:pointer}.plk label:hover{border-color:#3a4258}.plk input{width:18px;height:18px;accent-color:var(--blue)}
+@media(max-width:520px){.plk{grid-template-columns:1fr}}
 /* === МОБІЛЬНА ВЕРСІЯ (вузькі екрани) === */
 @media(max-width:760px){
  header{padding:12px 14px;gap:10px;flex-wrap:wrap}h1{font-size:21px}header .mut{display:none}.logo{width:36px;height:27px}
@@ -79,7 +115,7 @@ dl{display:grid;grid-template-columns:150px 1fr;gap:6px 12px;margin:0}dt{color:v
 <section id="sPrev" class="hide"><h2>1. Зображення та об'єкти</h2><div class="stage" id="stage" tabindex="0" aria-label="Завантажене фото: натисни, щоб виділити"><img id="prev" alt="Завантажене зображення" decoding="async"><button type="button" class="xbtn" id="xbtn" aria-label="Прибрати фото" title="Прибрати фото">×</button></div><div class="chips" id="chips"></div><p id="st1" class="mut"></p></section>
 <section id="sDesc" class="hide"><h2>2. Опис</h2><div id="desc"></div><div class="row actions" style="margin-top:14px"><button class="btn red" id="genBtn">🧱 Створити свою фігурку</button></div></section>
 <section id="sRes" class="hide"><h2>3. Схожі мініфігурки LEGO</h2><div id="res"></div></section>
-<section id="sGen" class="hide"><h2>4. Ваша власна мініфігурка</h2><div id="genProg" aria-live="polite"></div><div id="gen"></div></section>
+<section id="sGen" class="hide"><h2>4. Ваша власна мініфігурка</h2><div id="variants" aria-live="polite"></div><div id="genProg" aria-live="polite"></div><div id="gen"></div></section>
 <div id="toast" role="status" aria-live="polite"></div>
 </main>
 <!-- === ПОВЕДІНКА СТОРІНКИ (JavaScript) === -->
@@ -156,7 +192,7 @@ function cropB64(){return new Promise(res=>{const im=new Image();im.onload=()=>{
 // ---- regeneration state: ONE source of truth for locks/history, owned by this page (the 3D viewer only reports lock clicks) ----
 let GEN={id:null,roles:[],hist:[],busy:false,sig:null},EPOCH=0; // EPOCH changes with every new picture/subject: a late answer for the OLD subject is dropped
 // --- КРОК 4: генерація власної фігурки та 3D-переглядач ---
-function resetGen(){EPOCH++;GEN={id:null,roles:[],hist:[],busy:false,sig:null};setBusy(false);$('genProg').innerHTML='';$('gen').innerHTML=''}
+function resetGen(){EPOCH++;GEN={id:null,roles:[],hist:[],busy:false,sig:null};setBusy(false);$('genProg').innerHTML='';$('gen').innerHTML='';$('variants').innerHTML='';if(window.MyFigs)window.MyFigs.forget()}
 const SIGL={head:['Голова','обличчя / голова'],hair:['Волосся','волосся'],torso:['Торс','торс'],legs:['Низ / ноги','ноги']};
 const roleShort=r=>r==='Низ / ноги'?'Ноги':r;
 addEventListener('message',e=>{if(e.origin!==location.origin||!e.data||!e.data.lego_locks)return;const v=e.data.lego_locks;if(!v||v.id!==GEN.id||!Array.isArray(v.roles))return;GEN.roles=v.roles.filter(x=>typeof x==='string').slice(0,12);paintLockBar()});
@@ -166,19 +202,22 @@ function savePng(){const f=$('v3');if(!f||!f.contentWindow||!f.contentWindow.REA
 function setBusy(on){GEN.busy=on;document.querySelectorAll('[data-needs-idle],#genBtn').forEach(b=>{b.disabled=on});document.querySelectorAll('[data-regen-btn]').forEach(b=>b.classList.toggle('loading',on));$('gen').classList.toggle('busy',on&&!!$('gen').innerHTML.trim())}
 function progHTML(m,mode){const x=/^(\d)\/(\d)/.exec(m||'');const pct=x?Math.round((+x[1]-0.4)/+x[2]*100):null;return `<div class="prog"><div class="row"><div class="txt">${spin(esc(m||'Працюю…'))}</div></div><div class="bar${pct==null?' ind':''}"><i style="${pct==null?'':'width:'+pct+'%'}"></i></div><p class="mut" style="margin:8px 0 0">${mode==='ai'?'Стилізований AI-варіант: 1–4 хв (безкоштовні GPU в черзі).':'Зазвичай 10–30 с. Можна нічого не натискати — попередня фігурка залишається нижче.'}</p></div>`}
 function diffHTML(prev,cur,roles){if(!prev||!cur)return '';const li=Object.keys(SIGL).map(k=>{const [role,label]=SIGL[k];if(roles.includes(role))return `<li>🔒 ${label} — без змін</li>`;return prev[k]!==cur[k]?`<li>✅ ${label} — нове</li>`:`<li>⚪ ${label} — лишилось (немає чим замінити)</li>`});return `<ul class="diff" aria-label="Що змінилося">${li.join('')}</ul>`}
-function toolbarHTML(top){return `<div class="toolbar"><button class="btn blue" data-regen-btn data-needs-idle onclick="gen(null,{regen:true})">↻ Згенерувати ще раз</button><button class="btn" data-needs-idle onclick="savePng()" title="Зберегти 3D-фігурку як картинку">⬇ Зберегти PNG</button><button class="btn ghost hide" id="clrLocks" onclick="clearLocks()">🔓 Зняти всі замочки</button>${top?'<div class="lockbar grow" id="lockbar" aria-live="polite"></div>':''}</div>`}
+// 3D-екран + колонка облич праворуч (спільне для нової генерації та фігурки з історії)
+function viewerHTML(vsrc){return `<div id="v3box"><div id="v3wrap"><iframe id="v3" src="${esc(vsrc)}" title="3D мініфігурка" style="width:100%;height:100%;border:0;display:block" allow="fullscreen"></iframe></div><div id="facePanel" aria-live="polite"></div></div>
+   <p class="mut">🧱 3D-мініфігурка з офіційних деталей LDraw — обертайте мишкою або пальцем, кнопки знизу: вигляд спереду/збоку/ззаду, автообертання, ⬇ PNG. <a target="_blank" id="v3full" href="${esc(vsrc)}">Відкрити на весь екран ↗</a></p><p class="mut">🙂 Щоб вибрати обличчя, наведи мишу або клікни на рядок <b>«Голова»</b> (або кнопку 🙂) у списку деталей справа.</p>`}
+function toolbarHTML(top){return `<div class="toolbar"><button class="btn blue" data-regen-btn data-needs-idle onclick="gen(null,{regen:true})">↻ Згенерувати ще раз</button><button class="btn" data-needs-idle onclick="savePng()" title="Зберегти 3D-фігурку як картинку">⬇ Зберегти PNG</button><button class="btn ghost" data-needs-idle onclick="openPartsModal()" title="Вибрати, які деталі перегенерувати (окреме вікно)">🎯 Перегенерувати деталі…</button><button class="btn ghost hide" id="clrLocks" onclick="clearLocks()">🔓 Зняти всі замочки</button>${top?'<div class="lockbar grow" id="lockbar" aria-live="polite"></div>':''}</div>`}
 async function gen(mode,opts={}){if(!DESC||GEN.busy)return;const ep=EPOCH;const EP=mode==='ai'?'generate_ai':'generate';const regen=!!opts.regen||(!!GEN.id&&mode!=='ai');
  $('sGen').classList.remove('hide');setBusy(true);$('genProg').innerHTML=progHTML('Готую фрагмент з обраним персонажем…',mode);if(!$('gen').innerHTML.trim())$('sGen').scrollIntoView({behavior:'smooth'});
  try{const crop=await cropB64();const body={crop,subject:SUBJ,description:DESC};
-  if(regen&&mode!=='ai'&&GEN.id){Object.assign(body,{prev_id:GEN.id,history:GEN.hist.slice(-12),...(GEN.roles.length?{lock_from:GEN.id,locked_roles:GEN.roles}:{})})}
+  const userRoles=GEN.roles.slice(),LR=Array.isArray(opts.locks)?opts.locks:GEN.roles; // opts.locks — з вікна «Перегенерувати деталі»: фіксуємо все, крім вибраних
+  if(regen&&mode!=='ai'&&GEN.id){Object.assign(body,{prev_id:GEN.id,history:GEN.hist.slice(-12),...(LR.length?{lock_from:GEN.id,locked_roles:LR}:{})})}
   const r=await api(EP,body,m=>{if(ep===EPOCH)$('genProg').innerHTML=progHTML(m,mode)});if(ep!==EPOCH)return;
   const u=`data:${r.mime};base64,${r.image}`;const ap=r.appearance_uk||{};const v3=r.viewer3d||null;const prevSig=GEN.sig;
-  if(v3&&mode!=='ai'){GEN.id=(v3.split('id=')[1]||'').split('&')[0];GEN.sig=r.signature||null;if(r.signature)GEN.hist.push(r.signature);GEN.roles=Array.isArray(r.locks_applied)?r.locks_applied:[]}
+  if(v3&&mode!=='ai'){GEN.id=(v3.split('id=')[1]||'').split('&')[0];GEN.sig=r.signature||null;if(r.signature)GEN.hist.push(r.signature);GEN.roles=Array.isArray(opts.locks)?userRoles:(Array.isArray(r.locks_applied)?r.locks_applied:[])}
   const lk=GEN.roles.length?'&locks='+encodeURIComponent(GEN.roles.join(',')):'';const vsrc=v3?v3+lk:null;
   $('genProg').innerHTML=r.locks_missing?'<div class="warnbox">⚠ Замочки не вдалося застосувати: попередня фігурка вже недоступна на сервері (він перезапускався). Згенеровано все заново — зафіксуй потрібні деталі ще раз.</div>':'';
   $('gen').innerHTML=`${v3?toolbarHTML(true)+(regen&&prevSig?diffHTML(prevSig,r.signature,GEN.roles):''):''}
-   ${v3?`<div id="v3box"><div id="v3wrap"><iframe id="v3" src="${esc(vsrc)}" title="3D мініфігурка" style="width:100%;height:100%;border:0;display:block" allow="fullscreen"></iframe></div><div id="facePanel" aria-live="polite"></div></div>
-   <p class="mut">🧱 3D-мініфігурка з офіційних деталей LDraw — обертайте мишкою або пальцем, кнопки знизу: вигляд спереду/збоку/ззаду, автообертання, ⬇ PNG. <a target="_blank" href="${esc(vsrc)}">Відкрити на весь екран ↗</a></p><p class="mut">🙂 Наведи мишу або клікни на <b>голову</b> (в списку деталей справа чи на самій фігурці) — праворуч з'являться найпохожіші обличчя.</p>`:`<img src="${u}" alt="Згенерована мініфігурка"><p class="mut">ℹ️ Це спрощений 2D-шаблон: тип ніг, капюшон і скульптурне волосся повністю видно лише в 3D.</p><div class="row actions" style="margin-top:10px"><a class="btn" download="lego-minifig.png" href="${u}">⬇ Зберегти PNG</a></div>`}
+   ${v3?viewerHTML(vsrc):`<img src="${u}" alt="Згенерована мініфігурка"><p class="mut">ℹ️ Це спрощений 2D-шаблон: тип ніг, капюшон і скульптурне волосся повністю видно лише в 3D.</p><div class="row actions" style="margin-top:10px"><a class="btn" download="lego-minifig.png" href="${u}">⬇ Зберегти PNG</a></div>`}
    ${r.author_touch_uk?`<p><span class="tag ok">✍️ авторський штрих</span> ${esc(r.author_touch_uk)}</p>`:''}
    ${(r.qa_rules||[]).filter(x=>/^(обличчя|голова|волосся|торс|ноги)/.test(x)).length?`<p class="mut">🛡 Правила якості: ${(r.qa_rules||[]).filter(x=>/^(обличчя|голова|волосся|торс|ноги)/.test(x)).map(esc).join(' · ')}</p>`:''}
    <div class="row actions" style="margin-top:8px"><button class="btn blue" data-regen-btn data-needs-idle onclick="gen(null,{regen:true})">↻ Згенерувати ще раз</button><button class="btn" data-needs-idle onclick="gen('ai')">✨ Стилізований AI-варіант (повільно)</button></div>
@@ -190,11 +229,37 @@ async function gen(mode,opts={}){if(!DESC||GEN.busy)return;const ep=EPOCH;const 
    ${(r.references_rejected||[]).length?`<p class="mut">Відхилено ${r.references_rejected.length} референс(и) — інше зображення/версія персонажа: ${r.references_rejected.map(x=>`<a href="${esc(x.url)}" target="_blank">${esc(x.title)}</a>`).join(', ')}</p>`:''}
    ${(r.alternatives||[]).length?`<h3>Інші варіанти</h3><div class="row">${r.alternatives.map(a=>`<div style="text-align:center"><img src="data:${a.mime};base64,${a.image}" style="width:150px;border-radius:8px;background:#1c2130"><div class="mut">${esc(a.score)}/10</div></div>`).join('')}</div>`:''}
    ${v3?`<details style="margin-top:12px"><summary class="mut">2D-ескіз (плоский шаблон, для порівняння)</summary><p class="mut">ℹ️ 2D-шаблон спрощений: він не показує тип ніг (спідниця/халат), капюшон і скульптурне волосся — повна форма видна в 3D вище.</p><img src="${u}" style="width:220px;border-radius:8px;background:#1c2130"> <a class="btn" download="lego-minifig-2d.png" href="${u}">⬇ 2D PNG</a></details>`:''}<details style="margin-top:12px"><summary class="mut">Специфікація / промпт і етапи</summary><pre class="mut" style="white-space:pre-wrap">${esc(r.prompt||JSON.stringify(r.spec,null,1))}</pre><pre class="mut" style="white-space:pre-wrap">${(r.steps||[]).map(esc).join('\n')}</pre></details>`;
-  paintLockBar();if(window.MyFigs&&mode!=='ai')try{window.MyFigs.afterGen(r)}catch{}
+  paintLockBar();watchViewer();if(window.MyFigs&&mode!=='ai')try{window.MyFigs.afterGen(r)}catch{}
   if(v3&&mode!=='ai'&&window.FacePicker)window.FacePicker.setFigure(GEN.id);
   if(regen&&v3&&mode!=='ai')$('v3wrap').scrollIntoView({behavior:'smooth',block:'center'});
  }catch(e){if(ep!==EPOCH)return;$('genProg').innerHTML='';const tmp=document.createElement('div');showErr(tmp,e,()=>gen(mode,opts),'Спробувати ще раз');$('genProg').appendChild(tmp)}
  finally{if(ep===EPOCH)setBusy(false)}}
 $('genBtn').onclick=()=>gen();
+// --- 3D видно / не видно: переглядач зупиняє рендер, коли його прокрутили з екрана (плавніша прокрутка) ---
+let V3IO=null;function fitFace(){const w=$('v3wrap'),b=$('v3box');if(w&&b)b.style.setProperty('--v3h',w.offsetHeight+'px')}
+function watchViewer(){const f=$('v3');if(!f)return;fitFace();if(!('IntersectionObserver' in window))return;if(V3IO)V3IO.disconnect();V3IO=new IntersectionObserver(es=>{for(const e of es)try{f.contentWindow.postMessage({viewer_visible:e.isIntersecting},location.origin)}catch{}},{rootMargin:'120px'});V3IO.observe(f)}
+let rzT2=0;addEventListener('resize',()=>{clearTimeout(rzT2);rzT2=setTimeout(fitFace,150)},{passive:true});
+// --- Робочий екран із «Мої фігурки»: фото з кешу (збережений фрагмент), опис і вибраний варіант у 3D ---
+window.WS={
+ restore(f,o){PH++;PICKING=false;selPhoto(false);resetGen();const c=f.photo_crop||f.photo_thumb;
+  document.querySelectorAll('.box').forEach(b=>b.remove());$('chips').innerHTML='';$('res').innerHTML='';$('sRes').classList.add('hide');
+  if(c){IMG=c;MIME='image/webp';window.ORIG='data:image/webp;base64,'+c;$('prev').src=window.ORIG;$('sPrev').classList.remove('hide');$('st1').textContent='📂 Фото з «Мої фігурки»: '+(f.title||'')}else{IMG=null;window.ORIG=null;$('sPrev').classList.add('hide')}
+  const cx=f.ctx||{};DESC=cx.description||null;SUBJ={label:(cx.subject&&cx.subject.label)||f.title||'Об\'єкт',box_2d:null};
+  if(DESC){$('desc').innerHTML=`<p>${esc(DESC.summary_uk)}</p><dl>${Object.keys(L).filter(k=>DESC[k]&&DESC[k]!=='null').map(k=>`<dt>${L[k]}</dt><dd>${esc(DESC[k])}</dd>`).join('')}</dl>`;$('sDesc').classList.remove('hide')}else $('sDesc').classList.add('hide');
+  $('sGen').classList.remove('hide');$('gen').innerHTML=toolbarHTML(true)+viewerHTML(o.viewer3d)+(DESC?'':'<div class="warnbox">ℹ️ Це стара фігурка без збереженого опису: перегляд і вибір облич працюють, а для «ще раз» завантаж фото знову.</div>');
+  GEN.id=o.out_id;paintLockBar();watchViewer();if(window.FacePicker)window.FacePicker.setFigure(o.out_id);scrollTo({top:0,behavior:'smooth'})},
+ // перемикання варіанта: НІЧОГО не видаляє і не змінює в історії — лише показує інший варіант
+ showVariant(o){const f=$('v3');if(!f)return;GEN.id=o.out_id;GEN.roles=[];GEN.sig=null;f.src=o.viewer3d;const a=$('v3full');if(a)a.href=o.viewer3d;paintLockBar();if(window.FacePicker)window.FacePicker.setFigure(o.out_id)}};
+// --- Окреме вікно «Перегенерувати деталі»: галочки → нові лише вибрані деталі, решта фіксується; результат — НОВИЙ варіант ---
+const ALLROLES=['Голова','Волосся','Головний убір','Плащ / броня','Торс','Рука','Кисть','Низ / ноги','Аксесуар'];
+function openPartsModal(){if(!GEN.id||GEN.busy)return;if(!DESC){toast('Для цієї фігурки немає опису — завантаж фото ще раз, щоб перегенерувати.');return}
+ let roles=[];try{roles=[...new Set(($('v3').contentWindow.PARTS||[]).map(p=>p.role).filter(r=>ALLROLES.includes(r)))]}catch{}if(!roles.length)roles=['Голова','Волосся','Торс','Рука','Кисть','Низ / ноги'];roles.sort((a,b)=>ALLROLES.indexOf(a)-ALLROLES.indexOf(b));
+ const m=document.createElement('div');m.className='modal';m.id='partsModal';m.setAttribute('role','dialog');m.setAttribute('aria-modal','true');m.setAttribute('aria-label','Перегенерувати деталі');
+ m.innerHTML=`<div class="mb"><div class="vHead"><h3 class="grow">🎯 Перегенерувати деталі</h3><button class="fp-x" data-x aria-label="Закрити">×</button></div><p class="mut" style="margin:0">Познач деталі, які треба змінити. Усі інші залишаться як зараз. Поточний варіант не зникне — з'явиться <b>новий</b> поруч.</p>
+  <div class="plk">${roles.map(r=>`<label><input type="checkbox" value="${esc(r)}"> ${esc(r)}</label>`).join('')}</div><div class="row"><button class="btn blue" id="pmGo" disabled>↻ Перегенерувати вибрані</button><button class="btn ghost" data-x>Скасувати</button></div></div>`;
+ document.body.append(m);document.documentElement.classList.add('noscroll');const ek=e=>{if(e.key==='Escape')close()};const close=()=>{m.remove();document.documentElement.classList.remove('noscroll');document.removeEventListener('keydown',ek)};document.addEventListener('keydown',ek);
+ m.addEventListener('click',e=>{if(e.target===m||e.target.closest('[data-x]'))close()});const go=m.querySelector('#pmGo');m.querySelectorAll('input').forEach(i=>i.onchange=()=>{go.disabled=!m.querySelector('input:checked')});
+ go.onclick=()=>{const sel=[...m.querySelectorAll('input:checked')].map(i=>i.value);if(!sel.length)return;const locks=ALLROLES.filter(r=>!sel.includes(r));close();gen(null,{regen:true,locks})};const f0=m.querySelector('input');if(f0)f0.focus()}
+
 </script><script src="/face_picker.js" defer></script><script src="/account.js" defer></script><script src="/my_figures.js" defer></script>
 </body></html>

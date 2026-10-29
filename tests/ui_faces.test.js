@@ -34,13 +34,15 @@ const desc = { hair: 'dirty blonde hair in a low bun, loose strands', face: 'you
   await fr().locator('#plist .row', { hasText: 'Голова' }).first().hover();
   await p.waitForSelector('#facePanel.open .fp-card', { timeout: 20000 });
   { const pb = await p.locator('#facePanel').boundingBox(), fb = await p.locator('#v3').boundingBox(), vb = await p.locator('#v3box').boundingBox();
-    ok(pb.x >= fb.x && pb.x + pb.width <= fb.x + fb.width + 1 && pb.y >= fb.y - 1 && pb.y + pb.height <= fb.y + fb.height + 1, 'flyout sits inside the 3D screen area');
-    ok(Math.abs((pb.x + pb.width) - (fb.x + fb.width - 340)) < 24, 'flyout is directly beside the parts / locks list (right side), gap ' + Math.round((fb.x + fb.width - 340) - (pb.x + pb.width)) + 'px');
-    ok(pb.x + pb.width / 2 > fb.x + fb.width / 2, 'flyout is on the right half of the 3D screen'); void vb; }
+    ok(pb.x >= fb.x + fb.width - 2 && pb.x + pb.width <= vb.x + vb.width + 12, 'face panel is its own column to the RIGHT of the 3D screen (does not overlap the figure) ' + JSON.stringify([pb, fb, vb].map(o => [o.x, o.width].map(Math.round))));
+    ok(pb.height <= fb.height + 2, 'face panel is not taller than the 3D screen (no page-length nested scroll)');
+    ok(pb.x > fb.x + fb.width / 2, 'face panel is on the right'); }
   await p.locator('#facePanel [data-fp-close]').click(); ok(await p.locator('#facePanel.open').count() === 0, '× closes the flyout');
   { await p.locator('#v3box').scrollIntoViewIfNeeded(); await p.evaluate(() => window.scrollTo(0, document.getElementById('v3box').getBoundingClientRect().top + scrollY - 20)); await p.waitForTimeout(400); const hp = await fr().evaluate(() => window.headPoint()); ok(!!hp, 'head screen position known'); await p.mouse.move(5, 5);
     const fb = await p.locator('#v3').boundingBox(); await p.mouse.move(fb.x + hp.x, fb.y + hp.y, { steps: 4 }); await p.mouse.down(); await p.mouse.up();
-    await p.waitForSelector('#facePanel.open .fp-card', { timeout: 20000 }); ok(true, 'clicking the head ON THE 3D figure opens the flyout'); }
+    await p.waitForTimeout(1200); ok(await p.locator('#facePanel.open').count() === 0, 'clicking the head ON THE 3D figure does NOT open the face panel'); }
+  await fr().locator('#plist .fbtn').first().click(); await p.waitForSelector('#facePanel.open .fp-card', { timeout: 20000 }); ok(true, '🙂 button in the Head row opens the face panel');
+  await p.waitForTimeout(500); await p.screenshot({ path: OUT + '/ui3_face_panel.png' });
   await p.waitForTimeout(600); await p.keyboard.press('Escape'); await p.waitForTimeout(300); ok(await p.locator('#facePanel.open').count() === 0, 'Esc closes the flyout');
   await fr().locator('#plist .row', { hasText: 'Голова' }).first().click(); await p.waitForSelector('#facePanel.open .fp-card', { timeout: 20000 });
   const n = await p.locator('#facePanel .fp-card').count(); ok(n >= 4 && n <= 6, 'face panel shows 4–6 faces (' + n + ')');

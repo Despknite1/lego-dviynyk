@@ -30,7 +30,7 @@ const ground = new THREE.Mesh(new THREE.PlaneGeometry(2000, 2000), new THREE.Sha
 let until = performance.now() + 4000; const wake = (ms = 3000) => { until = Math.max(until, performance.now() + ms); }; // keep drawing for a few seconds after anything changes (late textures / decals)
 // === Розмір полотна та завантаження специфікації фігурки ===
 function resize() { wake(); const w = canvas.parentElement.clientWidth || innerWidth, h = canvas.parentElement.clientHeight || innerHeight; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); }
-addEventListener('resize', resize); resize();
+let rzT = 0; addEventListener('resize', () => { cancelAnimationFrame(rzT); rzT = requestAnimationFrame(resize); }); resize(); // дебаунс: не більше одного перерахунку розміру на кадр
 
 const params = new URLSearchParams(location.search);
 async function getSpec() {
@@ -370,19 +370,15 @@ function showMini(p) {
   $('minihdr').innerHTML = `<b>${p.role}</b> · ${p.id} — ${p.title || ''} <span style="color:#777">(обертайте мишею; ззаду видно приховані принти)</span>`;
 }
 const LOCK_ID = params.get('id') || '';
-// ---- "closest faces" trigger: hovering / clicking the HEAD (in the parts list or on the 3D figure) asks the parent page to open the face picker flyout ----
+// ---- "closest faces" trigger: hovering / clicking the HEAD ROW in the parts list (never the 3D figure itself) asks the parent page to open the face picker flyout ----
 const askHead = (open, src) => { try { parent.postMessage({ lego_head: { id: LOCK_ID, open, src } }, location.origin); } catch {} };
 const HEAD_ROLES = new Set(['Голова', 'Волосся', 'Головний убір']);
-const ray = new THREE.Raycaster(), ndc = new THREE.Vector2(); let headT = 0, lastMv = 0, overHead = false, downAt = null;
+const ray = new THREE.Raycaster(), ndc = new THREE.Vector2(); 
 function headHit(e) { const ms = (window.PARTS || []).filter(p => HEAD_ROLES.has(p.role) && p.mesh).map(p => p.mesh); if (!ms.length) return false; const r = canvas.getBoundingClientRect(); ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1); ray.setFromCamera(ndc, camera); return ray.intersectObjects(ms, true).length > 0; }
-let mvT = 0;
-function onMove(e) { lastMv = performance.now(); const h = headHit(e); canvas.style.cursor = h ? 'pointer' : ''; if (h && !overHead) { clearTimeout(headT); headT = setTimeout(() => askHead(true, '3d'), 200); } if (!h) clearTimeout(headT); overHead = h; }
-canvas.addEventListener('pointermove', e => { if (e.buttons) return; clearTimeout(mvT); if (performance.now() - lastMv < 90) { mvT = setTimeout(() => onMove(e), 100); return; } onMove(e); }); // throttled, with a trailing call so the LAST position always counts
+// ВАЖЛИВО: клік/перетягування/наведення на САМІЙ 3D-фігурці панель облич НЕ відкриває (лише рядок «Голова» у списку деталей або кнопка 🙂 в ньому).
 window.headPoint = () => { const ms = (window.PARTS || []).filter(p => p.role === 'Голова' && p.mesh).map(p => p.mesh); if (!ms.length) return null; const b = new THREE.Box3(); ms.forEach(m => b.expandByObject(m)); const c = b.getCenter(new THREE.Vector3()).project(camera), r = canvas.getBoundingClientRect(); return { x: r.left + (c.x + 1) / 2 * r.width, y: r.top + (1 - c.y) / 2 * r.height }; }; // test hook: where the head is on screen
 addEventListener('keydown', e => { if (e.key === 'Escape') askHead(false, 'esc'); }); // focus is inside the iframe after a click on the figure
-canvas.addEventListener('pointerleave', () => { clearTimeout(headT); clearTimeout(mvT); overHead = false; });
-canvas.addEventListener('pointerdown', e => { downAt = { x: e.clientX, y: e.clientY }; });
-canvas.addEventListener('pointerup', e => { if (!downAt) return; const moved = Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) > 5; downAt = null; if (!moved && headHit(e)) askHead(true, '3d-click'); }); let LOCKS = new Set((params.get('locks') || '').split(',').filter(Boolean));
+let LOCKS = new Set((params.get('locks') || '').split(',').filter(Boolean));
 // the parent page owns the lock state (survives regeneration); we only report changes. No localStorage: a stale id used to leave invisible locks on a NEW figure.
 // === «Замочки» деталей та бічна панель ===
 function saveLocks() { const v = { id: LOCK_ID, roles: [...LOCKS] }; try { parent.postMessage({ lego_locks: v }, location.origin); } catch {} }
@@ -392,7 +388,7 @@ async function buildPanel() {
   const P = window.PARTS || []; await Promise.all(P.map(async p => { if (!p.title) { try { p.title = (await (await fetch('/ldraw/lib/parts/' + p.id + '.dat')).text()).split('\n')[0].replace(/^0\s+~?/, '').trim(); } catch { p.title = ''; } } const rs = window.ROLE_SETS || { hair: new Set(), hat: new Set(), neck: new Set() }; const byId = roleOf(p, rs.hair, rs.hat, rs.neck); const r = ROLE.find(([re]) => re.test(p.title)); p.role = byId || (r ? r[1] : 'Деталь'); }));
   const order = ['Голова', 'Волосся', 'Головний убір', 'Плащ / броня', 'Торс', 'Рука', 'Кисть', 'Низ / ноги', 'Аксесуар', 'Деталь']; P.sort((a, b) => order.indexOf(a.role) - order.indexOf(b.role));
   const bl = id => id.startsWith('custom') ? '' : `<a target="_blank" href="https://www.bricklink.com/v2/catalog/catalogitem.page?P=${encodeURIComponent(id.replace(/^3626[bc]p.*/, '3626c'))}">BrickLink</a> · <a target="_blank" href="https://library.ldraw.org/parts/list?s=${encodeURIComponent(id)}">LDraw</a>`;
-  $('plist').innerHTML = `<b>Деталі фігурки (${P.length})</b><div style="color:#777;font-size:.85em">🔒 — зафіксувати деталь (колір і принт): «Згенерувати ще раз» її не чіпатиме, усе інше буде новим</div>` + P.map((p, i) => `<div class="row" data-i="${i}"><span class="sw" style="background:${p.color}"></span><button class="lk" data-r="${p.role}" title="Зафіксувати деталь при повторній генерації" style="border:0;background:none;cursor:pointer;font-size:16px">${LOCKS.has(p.role) ? '🔒' : '🔓'}</button><div><b>${p.role}</b> · <code>${p.id}</code><br><span style="color:#555">${p.title}</span><br><span style="color:#888">колір ${p.color}</span> ${bl(p.id)}</div></div>`).join('')
+  $('plist').innerHTML = `<b>Деталі фігурки (${P.length})</b><div style="color:#777;font-size:.85em">🔒 — зафіксувати деталь (колір і принт): «Згенерувати ще раз» її не чіпатиме, усе інше буде новим</div>` + P.map((p, i) => `<div class="row" data-i="${i}"><span class="sw" style="background:${p.color}"></span><button class="lk" data-r="${p.role}" title="Зафіксувати деталь при повторній генерації" style="border:0;background:none;cursor:pointer;font-size:16px">${LOCKS.has(p.role) ? '🔒' : '🔓'}</button><div style="flex:1;min-width:0"><b>${p.role}</b> · <code>${p.id}</code><br><span style="color:#555">${p.title}</span><br><span style="color:#888">колір ${p.color}</span> ${bl(p.id)}</div>${p.role === 'Голова' ? '<button class="fbtn" type="button" title="Найпохожіші обличчя" aria-label="Вибрати обличчя">🙂</button>' : ''}</div>`).join('')
     + ((window.CUSTOM_PARTS || []).length ? `<div style="color:#a00;margin-top:6px">Декоративні 3D-елементи без офіційної деталі: ${window.CUSTOM_PARTS.join(', ')}</div>` : '') + `<div style="color:#777;margin:6px 0">Принти — друк на деталях; золото/срібло — металеві чорнила.</div>`;
   $('plist').querySelectorAll('.lk').forEach(b => b.onclick = e => { e.stopPropagation(); const r = b.dataset.r; LOCKS.has(r) ? LOCKS.delete(r) : LOCKS.add(r); saveLocks(); paintLocks(); });
   paintLocks(); saveLocks();
@@ -404,7 +400,10 @@ document.querySelectorAll('[data-v]').forEach(b => b.onclick = () => setView(b.d
 $('rot').onclick = () => { wake(); controls.autoRotate = !controls.autoRotate; $('rot').classList.toggle('on', controls.autoRotate); };
 controls.autoRotateSpeed = 2.5; controls.autoRotate = params.get('rotate') === '1';
 $('png').onclick = () => window.savePng();
-(function loop() { requestAnimationFrame(loop); const moved = controls.update(); if (moved || controls.autoRotate || performance.now() < until) renderer.render(scene, camera); })();
+// пауза рендеру, коли переглядач не видно (сторінка у фоні або прокручено далеко) — економить CPU/GPU і робить прокрутку плавнішою
+let VISIBLE = true; addEventListener('message', e => { if (e.origin !== location.origin || !e.data || typeof e.data.viewer_visible !== 'boolean') return; const was = VISIBLE; VISIBLE = e.data.viewer_visible; if (VISIBLE && !was) wake(); });
+document.addEventListener('visibilitychange', () => { if (!document.hidden) wake(); });
+(function loop() { requestAnimationFrame(loop); if (!VISIBLE || document.hidden) return; const moved = controls.update(); if (moved || controls.autoRotate || performance.now() < until) renderer.render(scene, camera); })();
 let building = Promise.resolve();
 const doBuild = () => (building = building.then(() => build()).catch(e => { $('msg').textContent = 'Помилка 3D: ' + e.message; console.error(e); window.READY = 'error'; }));
 // in-place rebuild (used by tests and by the page when a new spec arrives): always from the neutral pose, never from the previous figure's state

@@ -1,26 +1,28 @@
 /*
  * СТИЛІ панелі «Найпохожіші обличчя». Тут можна міняти розмір, положення та кольори панелі.
+ * Десктоп: окрема колонка ПРАВОРУЧ від 3D-екрана (3D звужується, нічого не перекриває фігурку). Мобільний: блок під переглядачем.
+ * Прокрутка лише одна — у самій панелі (тонка темна смуга), сітка всередині не прокручується окремо.
  */
-/* "Найпохожіші обличчя" panel (public/face_picker.js) */
-/* flyout: desktop = to the right of the 3D screen, right next to the parts/locks list (the viewer's list column is 340px wide); mobile = a block under the viewer */
-#v3box{position:relative;margin-top:12px}
+#v3box{position:relative;margin-top:12px;display:flex;gap:12px;align-items:stretch}
+#v3box>#v3wrap{flex:1 1 auto;min-width:0}
 #facePanel{display:none}
-#facePanel.open{display:block;position:absolute;top:10px;bottom:10px;right:352px;width:min(340px,calc(100% - 372px));overflow:auto;z-index:6;box-shadow:0 14px 40px #000b;border-radius:16px;animation:fpIn .18s ease-out}
+#facePanel.open{display:block;flex:0 0 320px;max-height:var(--v3h,720px);overflow-y:auto;overscroll-behavior:contain;border-radius:16px;animation:fpIn .18s ease-out}
 @keyframes fpIn{from{opacity:0;transform:translateX(10px)}to{opacity:1;transform:none}}
 .fp-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .fp-x{border:0;background:#232836;color:var(--txt);width:30px;height:30px;border-radius:8px;font-size:20px;line-height:1;cursor:pointer;flex:none}.fp-x:hover{background:var(--red);color:#fff}
-.fp{background:linear-gradient(180deg,#171b26,#11141b);border:1px solid var(--line);border-radius:16px;padding:14px 16px}
-.fp h3{margin:0 0 4px;font-size:17px;color:var(--yel)}
-.fp .fp-hint{margin:0 0 12px}
-.fp-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
-.fp-card{background:#12151d;border:2px solid var(--line);border-radius:14px;padding:10px;display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center;transition:.15s}
-.fp-card:hover{border-color:var(--yel);transform:translateY(-2px)}
+.fp{background:linear-gradient(180deg,#171b26,#11141b);border:1px solid var(--line);border-radius:16px;padding:12px 14px;min-height:100%}
+.fp h3{margin:0 0 4px;font-size:16px;color:var(--yel)}
+.fp .fp-hint{margin:0 0 10px;font-size:12px}
+.fp-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+.fp-card{background:#12151d;border:2px solid var(--line);border-radius:12px;padding:8px;display:flex;flex-direction:column;align-items:center;gap:5px;text-align:center;transition:border-color .15s;content-visibility:auto;contain-intrinsic-size:auto 190px}
+.fp-card:hover{border-color:var(--yel)}
 .fp-card.sel{border-color:#0a8f3c;background:#10201a}
-.fp-card img{width:84px;height:84px;object-fit:contain;border-radius:10px;background:#fff}
-.fp-card .fp-label{font-size:12px;line-height:1.3;color:var(--txt);min-height:32px}
+.fp-card img{width:72px;height:72px;object-fit:contain;border-radius:10px;background:#fff}
+.fp-card .fp-label{font-size:11.5px;line-height:1.3;color:var(--txt);min-height:30px}
 .fp-card .fp-score{font-size:11px;font-weight:700;border-radius:6px;padding:2px 8px;background:#232836;color:var(--yel)}
-.fp-card .btn{padding:8px 14px;font-size:14px;min-height:38px;width:100%}
+.fp-card .btn{padding:7px 10px;font-size:13px;min-height:34px;width:100%}
 .fp-card.sel .btn{background:#0a8f3c;color:#fff;box-shadow:0 4px 0 #066a2c}
 .fp-msg{margin-top:10px;font-size:13px}
-@media(max-width:760px){#facePanel.open{position:static;width:auto;margin-top:12px;overflow:visible;box-shadow:none}.fp-card .btn{flex:none}}
+@media(max-width:1499px){#facePanel.open{flex-basis:270px}.fp-card img{width:60px;height:60px}}
+@media(max-width:900px){#v3box{flex-direction:column}#facePanel.open{flex:none;max-height:none;overflow:visible}}
 @media(prefers-reduced-motion:reduce){#facePanel.open{animation:none}}
