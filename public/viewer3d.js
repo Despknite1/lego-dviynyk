@@ -1,3 +1,5 @@
+// 3D-переглядач мініфігурки (бібліотека three.js): будує модель з деталей LDraw,
+// накладає принти, обертання мишкою, список деталей із «замочками», клік по голові → вибір обличчя.
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { LDrawLoader } from 'three/addons/loaders/LDrawLoader.js';
@@ -26,6 +28,7 @@ const ground = new THREE.Mesh(new THREE.PlaneGeometry(2000, 2000), new THREE.Sha
 
 // idle rendering: draw only while something moves (two WebGL canvases + a 2048px shadow map used to be redrawn 60x/s forever)
 let until = performance.now() + 4000; const wake = (ms = 3000) => { until = Math.max(until, performance.now() + ms); }; // keep drawing for a few seconds after anything changes (late textures / decals)
+// === Розмір полотна та завантаження специфікації фігурки ===
 function resize() { wake(); const w = canvas.parentElement.clientWidth || innerWidth, h = canvas.parentElement.clientHeight || innerHeight; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); }
 addEventListener('resize', resize); resize();
 
@@ -42,6 +45,7 @@ const headMatsReady = headLoader.preloadMaterials('/ldraw/lib/ldconfig.ldr').cat
 const loadPrintedHead = async name => { await headMatsReady; const txt = await (await fetch('/ldraw/lib/parts/' + name + '.dat')).text(); return new Promise((res, rej) => headLoader.parse(txt, res, rej)); };
 const loadPart = name => new Promise((res, rej) => loader.load('/ldraw/lib/parts/' + name + '.dat', res, undefined, rej));
 
+// === Матеріали та текстури (пластик, метал, принти-наклейки) ===
 function plastic(hex, opts = {}) {
   return new THREE.MeshPhysicalMaterial({ color: new THREE.Color(hex || '#cccccc'), roughness: 0.32, metalness: 0, clearcoat: 0.55, clearcoatRoughness: 0.18, side: THREE.DoubleSide, ...opts });
 }
@@ -120,6 +124,7 @@ function resetScene() {
 window.poseReport = () => { const out = {}; for (const p of window.PARTS || []) { if (!['973', '3818', '3819', '3820', '3815', '3816', '3817'].includes(p.id) || !p.mesh || !p.mesh.isMesh) continue; p.mesh.updateMatrixWorld(true);
     const q = new THREE.Quaternion(), pos = new THREE.Vector3(); p.mesh.matrixWorld.decompose(pos, q, new THREE.Vector3()); const e = new THREE.Euler().setFromQuaternion(q, 'XYZ'); const k = p.id + '#' + (out[p.id] ? 'b' : 'a');
     out[k] = [pos.x, pos.y, pos.z, e.x / D, e.y / D, e.z / D].map(v => +v.toFixed(2)); } return out; };
+// === ГОЛОВНЕ: побудова 3D-моделі фігурки з деталей ===
 async function build() {
   resetScene();
   const S = await getSpec(); const t0 = performance.now();
@@ -346,6 +351,7 @@ async function build() {
 const ROLE = [[/Head|Headdress/, 'Голова'], [/Hair/, 'Волосся'], [/Helmet|Hat|Cap\b|Hood|Cowl|Bandana|Wrap|Beanie/, 'Головний убір'], [/Torso/, 'Торс'], [/Arm/, 'Рука'], [/Hand/, 'Кисть'], [/Hips|Leg|Skirt|Slope/, 'Низ / ноги'], [/Cape|Armour|Vest|Jacket|Lifevest|Epaulette|Shell|Breastplate|Neck/, 'Плащ / броня'], [/Sword|Shield/, 'Аксесуар']];
 // role of a part is decided by its ID (never by the free-text title: "Minifig Armour" must not become an arm)
 const ROLE_IDS = { head: /^3626|^12607$|^18955$/, torso: /^973$/, arm: /^381[89]$/, hand: /^3820$/, legs: /^(3815|3816|3817|41879a|51345|3678b|u9209c01|36036|24068|19859|custom-snake-tail)$/ };
+// === Список деталей, мініпревʼю, клік по голові ===
 function roleOf(p, hairIds, hatIds, neckIds) {
   const id = String(p.id); if (ROLE_IDS.head.test(id)) return 'Голова'; if (id === 'custom-hair' || id === 'custom-hair-sculpt' || hairIds.has(id)) return 'Волосся'; if (hatIds.has(id)) return 'Головний убір'; if (neckIds.has(id)) return 'Плащ / броня';
   if (ROLE_IDS.torso.test(id)) return 'Торс'; if (ROLE_IDS.arm.test(id)) return 'Рука'; if (ROLE_IDS.hand.test(id)) return 'Кисть'; if (ROLE_IDS.legs.test(id)) return 'Низ / ноги';
@@ -378,6 +384,7 @@ canvas.addEventListener('pointerleave', () => { clearTimeout(headT); clearTimeou
 canvas.addEventListener('pointerdown', e => { downAt = { x: e.clientX, y: e.clientY }; });
 canvas.addEventListener('pointerup', e => { if (!downAt) return; const moved = Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) > 5; downAt = null; if (!moved && headHit(e)) askHead(true, '3d-click'); }); let LOCKS = new Set((params.get('locks') || '').split(',').filter(Boolean));
 // the parent page owns the lock state (survives regeneration); we only report changes. No localStorage: a stale id used to leave invisible locks on a NEW figure.
+// === «Замочки» деталей та бічна панель ===
 function saveLocks() { const v = { id: LOCK_ID, roles: [...LOCKS] }; try { parent.postMessage({ lego_locks: v }, location.origin); } catch {} }
 const paintLocks = () => $('plist').querySelectorAll('.lk').forEach(x => { const on = LOCKS.has(x.dataset.r); x.textContent = on ? '🔒' : '🔓'; x.setAttribute('aria-pressed', on); x.title = on ? 'Деталь зафіксована — зняти замочок' : 'Зафіксувати деталь при повторній генерації'; });
 addEventListener('message', e => { if (e.origin !== location.origin || !e.data || !Array.isArray(e.data.set_locks)) return; LOCKS = new Set(e.data.set_locks); paintLocks(); });

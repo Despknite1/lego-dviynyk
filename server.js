@@ -1,3 +1,8 @@
+// Головний файл сервера (Node.js + Express). Запускається командою `npm start`.
+// Тут: налаштування безпеки, роздача сторінок з public/, і всі API-маршрути:
+// /api/detect (знайти людей на фото) → /api/describe (опис) → /api/search (пошук схожих LEGO)
+// → /api/generate (створити власну мініфігурку) → 3D-переглядач.
+// Зміна цього файлу = зміна ПОВЕДІНКИ сайту. Вигляд (кольори, кнопки) — у public/*.html та *.css.
 const express = require('express');
 const KEY = process.env.GEMINI_API_KEY;
 const TEXT_MODELS = (process.env.TEXT_MODELS || 'gemini-flash-lite-latest,gemini-3.5-flash-lite,gemini-3.1-flash-lite,gemini-3.1-flash-lite-preview,gemini-3-flash-preview,gemini-3.5-flash,gemini-3.8-flash,gemini-flash-latest').split(',');
@@ -6,6 +11,7 @@ const app = express();
 const logger = require('./lib/sec/log'), helmet = require('helmet'), crypto = require('crypto');
 app.set('trust proxy', +(process.env.TRUST_PROXY_HOPS || 1)); // Render/Cloudflare: trust only the first proxy hop
 app.disable('x-powered-by');
+// === Налаштування сервера: логи, безпека (helmet), стиснення, cookie ===
 app.use(require('pino-http')({ logger, genReqId: (req, res) => { const id = crypto.randomUUID(); res.setHeader('X-Request-Id', id); return id; }, serializers: { req: r => ({ id: r.id, method: r.method, url: String(r.url).split('?')[0] }), res: r => ({ status: r.statusCode }) }, autoLogging: { ignore: r => /^\/(ldraw|vendor|healthz)/.test(r.url) } }));
 app.use(helmet({
   contentSecurityPolicy: { useDefaults: true, directives: { 'script-src': ["'self'", "'unsafe-inline'"], 'script-src-attr': ["'unsafe-inline'"], 'img-src': ["'self'", 'data:', 'blob:', 'https:'], 'connect-src': ["'self'", 'blob:', 'data:'], 'worker-src': ["'self'", 'blob:'], 'frame-src': ["'self'"], 'frame-ancestors': ["'self'"], 'object-src': ["'none'"], 'base-uri': ["'self'"], 'form-action': ["'self'"] } },
@@ -14,11 +20,13 @@ app.use(helmet({
 }));
 app.use(require('compression')({ threshold: 1024 })); // gzip text/js/json/svg (three.module.js 1.3 MB -> ~0.3 MB); PNG/JPEG are skipped automatically
 app.use(require('cookie-parser')());
+// === Акаунти та публічні налаштування сайту (/config.json) ===
 app.use('/auth', require('./lib/sec/auth').router());
 app.get('/config.json', (req, res) => res.json({ figures: process.env.FIGURES_ENABLED !== 'false', figures_persistent: !!process.env.DATABASE_URL, accounts: require('./lib/sec/auth').enabled(), email_reset: require('./lib/sec/mailer').emailReady(), sms_reset: require('./lib/sec/mailer').smsReady() }));
 app.use('/api', express.json({ limit: '15mb' }));
 app.use(['/api/detect', '/api/describe', '/api/search', '/api/generate', '/api/generate_ai'], require('./lib/sec/upload').middleware(['image', 'crop']));
 // face thumbnails never change for a given part id: cache a week. HTML/JS/CSS stay revalidated (ETag => 304) so a deploy is visible immediately.
+// === Роздача файлів: сторінки з public/, three.js, готові картинки, 3D-деталі LDraw ===
 app.use('/face_thumbs', express.static(__dirname + '/public/face_thumbs', { maxAge: '7d', immutable: false }));
 app.use(express.static(__dirname + '/public', { etag: true, lastModified: true, maxAge: 0, setHeaders: (res, p) => { if (/\.(?:png|jpe?g|webp|svg|ico|woff2?)$/i.test(p)) res.setHeader('Cache-Control', 'public, max-age=86400'); else res.setHeader('Cache-Control', 'no-cache'); } }));
 app.use('/vendor/three', express.static(__dirname + '/node_modules/three', { maxAge: '7d' }));
@@ -29,6 +37,7 @@ app.get('/ldraw/packed/:part.mpd', (req, res) => { try { res.type('text/plain').
 
 // ---- "Мої фігурки": anonymous figure history (lib/my), own limiter + CSRF; FIGURES_ENABLED=false disables ----
 const myFigs = require('./lib/my/router'), myId = require('./lib/my/identity');
+// === «Мої фігурки»: збереження історії фігурок відвідувача ===
 app.use('/api/my', myFigs.router({ outDir: __dirname + '/out', materialize: async sp => { const fs = require('fs'), outDir = __dirname + '/out'; fs.mkdirSync(outDir, { recursive: true }); const f = Date.now() + '-' + Math.random().toString(36).slice(2, 6); const s = { ...sp }; try { s.textures = minifig.textures({ ...s, textures: undefined }); } catch (e) { log('my tex', e.message); } fs.writeFileSync(`${outDir}/${f}.json`, JSON.stringify(s)); try { fs.writeFileSync(`${outDir}/${f}.png`, minifig.renderPng(s).png); } catch {} return f; } }));
 app.use(['/api/generate', '/api/face-apply'], (req, res, next) => { if (req.body && typeof req.body === 'object') { delete req.body.__owner; if (myFigs.enabled() && req.method === 'POST') try { req.body.__owner = myId.owner(req, res, true); } catch {} } next(); });
 if (myFigs.enabled()) require('./lib/my/store').db().catch(e => logger.error({ evt: 'db.init', err: e.message }));
@@ -48,6 +57,7 @@ const health = new Map(); // model -> {until, lat}
 const DEAD = new Set(); // models that answered 404 (retired) — skipped for the process lifetime
 let quotaUntil = 0; // after a confirmed quota error stop calling Gemini for a short while (no hammering)
 const log = (...a) => logger.info({ evt: 'app' }, a.map(x => typeof x === 'string' ? x : (x && x.message) || JSON.stringify(x)).join(' ').slice(0, 500));
+// === Виклики ШІ (Gemini): запит до моделі, повтори, паралельні спроби ===
 async function callModel(m, body, timeout) {
   const t0 = Date.now();
   try {
@@ -112,10 +122,12 @@ const jobs = new Map(); let jid = 0;
 const wrap = fn => (req, res) => { const id = (++jid).toString(36) + Math.random().toString(36).slice(2, 8); const job = { status: 'pending', t: Date.now() }; jobs.set(id, job);
   ALS.run({ set: x => { job.stage = x; } }, () => fn(req.body, st => { job.stage = st; })).then(r => { job.status = 'done'; job.result = r; }).catch(e => { console.error(e); job.status = 'error'; job.code = e.quota ? 'quota' : e.busy ? 'busy' : undefined; job.error = String(e.message || e).replace(KEY || '§', '***');  if (!job.code && /timeout|час очікування/i.test(job.error)) job.code = 'timeout'; });
   res.json({ job: id }); };
+// === Статус довгого завдання (сторінка опитує, поки йде генерація) ===
 app.get('/job/:id', (req, res) => { const j = jobs.get(req.params.id); if (!j) return res.status(404).json({ status: 'error', error: 'Завдання не знайдено' }); res.json(j); if (j.status !== 'pending') setTimeout(() => jobs.delete(req.params.id), 600000); });
 setInterval(() => { for (const [k, v] of jobs) if (Date.now() - v.t > 1800000) jobs.delete(k); }, 600000);
 
 const detCache = new Map(); const hash = x => require('crypto').createHash('sha1').update(x || '').digest('hex');
+// === КРОК 1: знайти людей/персонажів на фото ===
 app.post('/api/detect', wrap(async ({ image, mime }, stage = () => {}) => {
   const hk = hash(image); if (detCache.has(hk)) return detCache.get(hk);
   stage('Gemini шукає персонажів на зображенні…');
@@ -128,6 +140,7 @@ app.post('/api/detect', wrap(async ({ image, mime }, stage = () => {}) => {
   return res;
 }));
 
+// === КРОК 2: детальний опис вибраного персонажа ===
 app.post('/api/describe', wrap(async ({ image, mime, subject }, stage = () => {}) => {
   stage('Gemini описує зачіску, одяг, принти, аксесуари…');
   const j = await gem(TEXT_MODELS, { contents: [{ parts: [img(image, mime), { text:
@@ -138,6 +151,7 @@ app.post('/api/describe', wrap(async ({ image, mime, subject }, stage = () => {}
 
 const UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130 Safari/537.36';
 const cache = new Map();
+// === Пошук на Brickset (база справжніх мініфігурок LEGO) ===
 async function getPage(u) {
   const c = cache.get(u); if (c && Date.now() - c.t < 6 * 3600e3) return c.v;
   const r = await fetch(u, { headers: { 'User-Agent': UA, 'Accept-Language': 'en' }, signal: AbortSignal.timeout(8000) });
@@ -255,6 +269,7 @@ function contactSheet(imgs) {
     p.stdin.end(JSON.stringify({ imgs })); setTimeout(() => { try { p.kill(); } catch {} }, 15000); });
 }
 const poolCache = new Map();
+// === КРОК 3: пошук схожих справжніх мініфігурок LEGO ===
 app.post('/api/search', wrap(async ({ description, crop }, stage = () => {}) => {
   const d = JSON.stringify(description);
   const ck = d + '|' + (crop ? crop.length + crop.slice(-64) : ''); if (searchCache.has(ck)) return searchCache.get(ck);
@@ -320,6 +335,7 @@ app.post('/api/search', wrap(async ({ description, crop }, stage = () => {}) => 
 
 // ---------- Custom minifig generation pipeline ----------
 const BUA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130 Safari/537.36';
+// === Альтернативна генерація картинки ШІ (AI Horde / Gemini Image) ===
 async function getJSON(u, opt = {}) { const r = await fetch(u, { ...opt, headers: { 'User-Agent': BUA, ...(opt.headers || {}) }, signal: AbortSignal.timeout(opt.timeout || 10000) }); if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }
 async function fetchImageB64(u, max = 2.5e6) {
   const r = await fetch(u, { headers: { 'User-Agent': BUA }, signal: AbortSignal.timeout(10000) });
@@ -468,6 +484,7 @@ Design a LEGO minifigure of this subject. Return JSON:
 const minifig = require('./lib/minifig');
 const rules = require('./lib/rules');
 // crop the shirt graphic from the user's photo and posterize it (Python/PIL) → data URL PNG for the torso decal
+// === Підбір обличчя та принтів для власної фігурки ===
 function addGraphic(sp, cr) {
   const b = sp && sp.torso_graphic_box; if (!Array.isArray(b) || b.length !== 4 || !b.every(v => Number.isFinite(+v)) || +b[2] - +b[0] < 20 || +b[3] - +b[1] < 20) { if (sp) delete sp.torso_graphic_png; return Promise.resolve(); }
   return new Promise(res => { const p = require('child_process').spawn('python3', [__dirname + '/lib/graphic.py']); let out = '';
@@ -553,6 +570,7 @@ const SPEC_DOC = `Minifigure spec JSON (all colors as #rrggbb hex):
  "accessories_uk":"accessories in Ukrainian","notes_uk":"short Ukrainian description of design choices"}`;
 
 // deterministic post-rules that fix common model misses (run after every spec)
+// === Фінальні правила-виправлення (див. lib/rules.js) ===
 function postRules(sp, description) { if (!sp) return sp; const D = JSON.stringify([description || {}, sp.inspection, sp.notes_uk, sp.design, sp.identity, sp.appearance_note]).toLowerCase(); const f = sp.face = sp.face || {};
   const ex = String(description?.attrs?.expression || '') + ' ' + String(description?.face || '') + ' ' + JSON.stringify(sp.inspection?.face || '');
   if (/tongue|язик/i.test(ex)) f.expression = 'tongue';
@@ -600,6 +618,7 @@ const faceLimit = (req, res, next) => { const now = Date.now(), arr = (fhits.get
 const faceCtx = sp => ({ identity: String((sp && (sp.identity || sp.design && sp.design.concept)) || '').slice(0, 300) });
 const faceSrc = b => { if (b && ID_RE.test(b.id || '')) { const o = readOut(b.id); if (o) return o; } return b && b.spec && typeof b.spec === 'object' ? { face: b.spec.face, head_part: b.spec.head_part, head_mold: b.spec.head_mold, hair_style: b.spec.hair_style, identity: b.spec.identity } : null; };
 // body: {id} (figure id from the viewer url) or {spec:{face,...}}, optional {n:4..6, exclude:[part ids], use_gemini:true + crop} -> {options:[{id,label,score,thumb,title,current}], current}
+// === Панель «Найпохожіші обличчя»: варіанти та застосування ===
 app.post('/api/face-options', faceLimit, async (req, res) => {
   try { const b = req.body || {}, sp = faceSrc(b); if (!sp) return res.status(400).json({ error: 'Потрібні id фігурки або spec.face' });
     const masked = (sp.face && sp.face.mask && sp.face.mask !== 'none') || (sp.face && sp.face.eye_mask) || (sp.head_mold && sp.head_mold !== 'standard') || sp.hair_style === 'bandana_tails';
@@ -617,6 +636,7 @@ app.post('/api/face-apply', faceLimit, (req, res) => {
     const f = __dirname + '/out/' + b.id; require('fs').writeFileSync(f + '.json.tmp', JSON.stringify(sp)); require('fs').renameSync(f + '.json.tmp', f + '.json'); try { require('fs').writeFileSync(f + '.png', minifig.renderPng(sp).png); } catch {}
     myFigs.record(b.__owner, { reason: 'face_pick', spec: sp, png: (() => { try { return require('fs').readFileSync(f + '.png'); } catch { return null; } })(), outId: b.id, prevOutId: b.id }).then(my => res.json({ ok: true, my, spec: sp, head: { id: r.head.part, title: r.head.title }, signature: regen.signature(sp), roles_locked: ['Голова'] }));
   } catch (e) { res.status(500).json({ error: 'Не вдалося застосувати обличчя' }); log('face-apply', e.message); } });
+// === КРОК 4: ГЕНЕРАЦІЯ власної мініфігурки (і «Згенерувати ще раз») ===
 app.post('/api/generate', wrap(async ({ image, mime, crop, subject, description, lock_from, locked_roles, prev_id, history, __owner }, stage = () => {}) => {
   const LK = lockedFields(lock_from || prev_id, locked_roles), FIXED = LK.fixed, LOCKED = LK.roles;
   // regeneration = the user already saw a figure (prev_id): every UNLOCKED role must come out different (exclude list = signatures of earlier figures)
@@ -730,5 +750,6 @@ ${SPEC_DOC}` }] }], generationConfig: { responseMimeType: 'application/json', te
     steps, seconds: +((Date.now() - T0) / 1000).toFixed(1), score: verdict?.score ?? null, qa_rules: (spec2 || spec)._qa || [], signature: regen.signature(spec2 || spec), regenerated: REGEN, locks_applied: LOCKED, locks_missing: LK.missing, file: `out/${fname}.png`, viewer3d: `/viewer3d.html?id=${fname}` };
 }));
 
+// === Перевірка «сервер живий» та запуск ===
 app.get('/healthz', (req, res) => res.send('ok'));
 app.listen(process.env.PORT || 8787, () => logger.info({ evt: 'start', accounts: require('./lib/sec/auth').enabled() }, 'up'));

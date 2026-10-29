@@ -1,3 +1,4 @@
+// Кнопки входу/реєстрації акаунта на головній сторінці (працює лише якщо акаунти увімкнені).
 // Account UI (shown only when the server enables accounts). No secrets stored client-side; session is an httpOnly cookie.
 (async () => {
   let cfg; try { cfg = await (await fetch('/config.json')).json(); } catch { return; } if (!cfg.accounts) return;

@@ -1,3 +1,6 @@
+/*
+ * СТИЛІ панелі «Найпохожіші обличчя». Тут можна міняти розмір, положення та кольори панелі.
+ */
 /* "Найпохожіші обличчя" panel (public/face_picker.js) */
 /* flyout: desktop = to the right of the 3D screen, right next to the parts/locks list (the viewer's list column is 340px wide); mobile = a block under the viewer */
 #v3box{position:relative;margin-top:12px}

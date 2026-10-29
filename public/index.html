@@ -1,21 +1,33 @@
-<!doctype html><html lang="uk"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<!doctype html>
+<!--
+  ГОЛОВНА СТОРІНКА сайту. Всередині три частини:
+    1) <style>  — вигляд (кольори, кнопки, розкладка) → міняйте, щоб змінити дизайн;
+    2) HTML-розмітка (<header>, <main>, секції 1–4) → тексти і блоки на сторінці;
+    3) <script> — поведінка (натискання кнопок, запити до сервера).
+-->
+<html lang="uk"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>LEGO-Двійник — знайди свою мініфігурку</title>
 <link rel="stylesheet" href="/face_picker.css">
 <style>
+/* === КОЛЬОРИ ТА ТЕМА: змінні --bg (фон), --card, --red, --yel (жовтий), --blue... Міняйте тут, щоб перефарбувати весь сайт === */
 :root{--bg:#0e1015;--card:#181b23;--line:#2a2f3c;--red:#e3000b;--yel:#ffd500;--blue:#0a6cff;--txt:#e9ecf2;--mut:#9aa3b5}
 *{box-sizing:border-box}body{margin:0;font-family:system-ui,Segoe UI,Roboto,sans-serif;color:var(--txt);min-height:100vh;background:#0b0d13}
 body:before{content:'';position:fixed;inset:0;z-index:-1;pointer-events:none;background:radial-gradient(circle at 12px 12px,#ffffff0d 5px,#0000 6px) 0 0/24px 24px,radial-gradient(ellipse at 15% -10%,#e3000b33,#0000 45%),radial-gradient(ellipse at 100% 10%,#0a6cff2e,#0000 45%),linear-gradient(180deg,#141824,#0b0d13 70%)}
+/* === ШАПКА сайту та логотип === */
 header{display:flex;align-items:center;gap:14px;padding:18px 28px;border-bottom:4px solid var(--red);background:linear-gradient(90deg,#1a0a0c,#12141a 40%,#0d1424);box-shadow:0 6px 24px #0008;position:relative;z-index:5}
 header:after{content:'';position:absolute;left:0;right:0;bottom:-10px;height:6px;background:repeating-linear-gradient(90deg,var(--yel) 0 40px,var(--blue) 40px 80px,#0a8f3c 80px 120px,var(--red) 120px 160px);opacity:.85}
 .logo{width:46px;height:34px;background:var(--red);border-radius:6px;position:relative;box-shadow:0 4px 0 #8f0007}
 .logo:before,.logo:after{content:"";position:absolute;top:-8px;width:14px;height:9px;background:var(--red);border-radius:3px 3px 0 0}.logo:before{left:7px}.logo:after{right:7px}
 h1{margin:0;font-size:26px;letter-spacing:.5px;font-weight:900;text-shadow:0 2px 0 #000}h1 b{color:var(--yel)}
+/* === РОЗКЛАДКА сторінки та зона завантаження фото === */
 main{max-width:1150px;margin:0 auto;padding:24px}
 .drop{border:3px dashed #3a4258;border-radius:22px;padding:46px;text-align:center;background:linear-gradient(160deg,#1d2230,#151821);cursor:pointer;transition:.2s;box-shadow:0 10px 30px #0007,inset 0 1px 0 #ffffff10;margin-top:12px}.drop:hover{border-color:var(--yel)}
 .drop.over{border-color:var(--yel);background:#1f2330}.drop p{color:var(--mut)}
+/* === КНОПКИ (.btn — жовта, .btn.ghost — темна) === */
 .btn{background:var(--yel);color:#111;border:0;border-radius:10px;padding:11px 18px;font-weight:700;cursor:pointer;box-shadow:0 4px 0 #a88c00;font-size:15px}
 .btn:active{transform:translateY(3px);box-shadow:0 1px 0 #a88c00}.btn.red{background:var(--red);color:#fff;box-shadow:0 4px 0 #8f0007}.btn.blue{background:var(--blue);color:#fff;box-shadow:0 4px 0 #0646a8}
 .btn:disabled{opacity:.5}
+/* === СЕКЦІЇ-КАРТКИ (кроки 1–4), фото з рамками, чіпи === */
 section{margin-top:24px;background:linear-gradient(180deg,#1a1e29,#141720);border:1px solid var(--line);border-top:4px solid var(--yel);border-radius:18px;padding:22px;box-shadow:0 12px 34px #0008}
 section:nth-of-type(2){border-top-color:var(--red)}section:nth-of-type(3){border-top-color:var(--blue)}section:nth-of-type(4){border-top-color:#0a8f3c}
 h2{margin:0 0 14px;font-size:20px;color:var(--yel);font-weight:900;letter-spacing:.3px}
@@ -24,6 +36,7 @@ h2{margin:0 0 14px;font-size:20px;color:var(--yel);font-weight:900;letter-spacin
 .box{position:absolute;border:3px solid var(--yel);border-radius:6px;cursor:pointer;transition:.15s}.box span{position:absolute;top:-26px;left:-3px;background:var(--yel);color:#111;font-size:12px;font-weight:700;padding:3px 7px;border-radius:5px;white-space:nowrap}
 .box:hover,.box.sel{border-color:var(--red);background:#e3000b22}.box.sel span,.box:hover span{background:var(--red);color:#fff}
 .chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}.chip{padding:8px 12px;border-radius:999px;background:#232836;border:1px solid var(--line);cursor:pointer}.chip.sel{background:var(--red)}
+/* === РЕЗУЛЬТАТИ пошуку (сітка карток) === */
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px}
 .res{background:linear-gradient(180deg,#171b26,#11141b);border:1px solid var(--line);border-radius:16px;padding:14px;transition:.15s}.res:hover{border-color:var(--yel);transform:translateY(-2px)}.res img{width:100%;height:190px;object-fit:contain;background:radial-gradient(circle,#2c3346,#151925);border-radius:12px}
 .res h3{margin:10px 0 4px;font-size:16px}.mut{color:var(--mut);font-size:13px}.tag{display:inline-block;font-size:11px;padding:2px 8px;border-radius:6px;margin-right:4px;font-weight:700}
@@ -37,6 +50,7 @@ dl{display:grid;grid-template-columns:150px 1fr;gap:6px 12px;margin:0}dt{color:v
 .btn:disabled{opacity:.5;cursor:not-allowed;box-shadow:none;transform:none}.btn:focus-visible,.chip:focus-visible,a:focus-visible,summary:focus-visible{outline:3px solid #6fb0ff;outline-offset:2px}
 .btn.loading{position:relative;padding-left:40px}.btn.loading:before{content:'';position:absolute;left:14px;top:50%;width:16px;height:16px;margin-top:-8px;border:3px solid currentColor;border-top-color:transparent;border-radius:50%;animation:s .9s linear infinite}
 .btn.ghost{background:#232836;color:var(--txt);box-shadow:0 4px 0 #11141b;border:1px solid var(--line)}
+/* === Повідомлення про помилки, прогрес, тулбар, тост === */
 .errbox{border:1px solid #ff6b6b66;background:#2a1215;border-radius:12px;padding:12px 14px;margin:8px 0}.errbox b{color:#ff9b9b}.errbox .row{margin-top:10px}
 .warnbox{border:1px solid #ffd50066;background:#2a2410;border-radius:12px;padding:10px 14px;margin:8px 0;font-size:14px}
 .prog{background:#12151d;border:1px solid var(--line);border-radius:14px;padding:14px;margin:0 0 14px}.prog .txt{font-weight:600}.prog .bar{height:8px;border-radius:99px;background:#232836;margin-top:10px;overflow:hidden}.prog .bar i{display:block;height:100%;width:8%;border-radius:99px;background:linear-gradient(90deg,var(--yel),var(--red));transition:width .6s}
@@ -47,6 +61,7 @@ dl{display:grid;grid-template-columns:150px 1fr;gap:6px 12px;margin:0}dt{color:v
 .diff{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-wrap:wrap;gap:6px}.diff li{font-size:13px;background:#1c2130;border:1px solid var(--line);border-radius:999px;padding:4px 10px}
 #toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%) translateY(30px);background:#232836;border:1px solid var(--yel);color:var(--txt);padding:11px 18px;border-radius:12px;box-shadow:0 10px 30px #000a;opacity:0;transition:.25s;z-index:99;max-width:min(92vw,520px);text-align:center;pointer-events:none}#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 #v3wrap{width:100%;height:min(82vh,720px);min-height:460px;border-radius:14px;overflow:hidden;background:#0b0d13;border:1px solid #2a2f3c;box-shadow:0 12px 34px #0008}
+/* === МОБІЛЬНА ВЕРСІЯ (вузькі екрани) === */
 @media(max-width:760px){
  header{padding:12px 14px;gap:10px;flex-wrap:wrap}h1{font-size:21px}header .mut{display:none}.logo{width:36px;height:27px}
  main{padding:12px}.drop{padding:26px 14px;border-radius:16px}.drop h2{font-size:17px}section{padding:14px;border-radius:14px;margin-top:16px}h2{font-size:18px}
@@ -56,16 +71,20 @@ dl{display:grid;grid-template-columns:150px 1fr;gap:6px 12px;margin:0}dt{color:v
 @media(max-width:420px){h1{font-size:19px}.chip{padding:10px 12px}#toast{bottom:12px}}
 @media(prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}
 </style></head><body>
+<!-- === HTML-РОЗМІТКА: шапка і основний вміст. Тексти можна міняти тут === -->
 <header><div class="logo"></div><h1>LEGO-<b>Двійник</b></h1><span class="mut">знайди мініфігурку, схожу на будь-кого</span></header>
 <main>
 <div class="drop" id="drop" role="button" tabindex="0" aria-label="Завантажити зображення"><h2>Вставте зображення (Ctrl+V), перетягніть сюди або натисніть, щоб вибрати файл</h2><p>Фото людини, тварини, персонажа — ми знайдемо схожі LEGO-мініфігурки</p><input type="file" id="file" accept="image/*" hidden></div>
+<!-- Секції кроків 1–4 (показуються по черзі) -->
 <section id="sPrev" class="hide"><h2>1. Зображення та об'єкти</h2><div class="stage" id="stage" tabindex="0" aria-label="Завантажене фото: натисни, щоб виділити"><img id="prev" alt="Завантажене зображення" decoding="async"><button type="button" class="xbtn" id="xbtn" aria-label="Прибрати фото" title="Прибрати фото">×</button></div><div class="chips" id="chips"></div><p id="st1" class="mut"></p></section>
 <section id="sDesc" class="hide"><h2>2. Опис</h2><div id="desc"></div><div class="row actions" style="margin-top:14px"><button class="btn red" id="genBtn">🧱 Створити свою фігурку</button></div></section>
 <section id="sRes" class="hide"><h2>3. Схожі мініфігурки LEGO</h2><div id="res"></div></section>
 <section id="sGen" class="hide"><h2>4. Ваша власна мініфігурка</h2><div id="genProg" aria-live="polite"></div><div id="gen"></div></section>
 <div id="toast" role="status" aria-live="polite"></div>
 </main>
+<!-- === ПОВЕДІНКА СТОРІНКИ (JavaScript) === -->
 <script>
+// --- Допоміжні функції та запити до сервера (api) ---
 const $=id=>document.getElementById(id);let IMG=null,MIME='image/jpeg',DESC=null,SUBJ=null,PH=0;// PH changes when the photo is replaced/removed: late answers for the OLD photo are dropped
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 class AppError extends Error{constructor(m,code){super(m);this.code=code}}
@@ -74,6 +93,7 @@ async function api(p,b,onStage){let r;try{r=await fetch('/api/'+p,{method:'POST'
  const j=await r.json().catch(()=>({}));if(!r.ok)throw new AppError(j.error||('HTTP '+r.status),r.status===429?'rate':'http_'+r.status);
  const t0=Date.now();let bad=0;for(let i=0;i<1500;i++){await sleep(700);let s;try{s=await (await fetch('/job/'+j.job)).json();bad=0}catch{if(++bad>15)throw new AppError('network','network');continue}if(s.status==='done')return s.result;if(s.status==='error')throw new AppError(s.error,s.code||'server');if(onStage&&s.stage)onStage(s.stage+' ('+Math.round((Date.now()-t0)/1000)+' с)')}throw new AppError('timeout','timeout')}
 // human-readable errors (never show technical text / stack traces / English API messages)
+// --- Зрозумілі повідомлення про помилки ---
 function humanError(e){const c=e&&e.code,m=String((e&&e.message)||'');
  if(c==='quota'||/quota|429.*(exceed|limit)|RESOURCE_EXHAUSTED/i.test(m))return{t:'Ліміт ШІ вичерпано',m:'Ліміт на сьогодні вичерпано, спробуй пізніше (~10:00 за Києвом). Те, що вже побудовано, нікуди не зникло.',retry:false};
  if(c==='busy'||c==='overload'||/перевантажен|завантажен|overload|503/i.test(m))return{t:'Gemini завантажений',m:'Забагато охочих одночасно. Спробуй за 1–2 хв.',retry:true};
@@ -86,6 +106,7 @@ function humanError(e){const c=e&&e.code,m=String((e&&e.message)||'');
 function showErr(el,e,retry,label){const h=humanError(e);el.innerHTML=`<div class="errbox" role="alert"><b>⚠ ${esc(h.t)}</b><div>${esc(h.m)}</div>${retry&&h.retry?`<div class="row"><button class="btn blue" data-retry>↻ ${esc(label||'Спробувати ще раз')}</button></div>`:''}</div>`;const b=el.querySelector('[data-retry]');if(b)b.onclick=retry}
 let toastT;function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('show'),3800)}
 const spin=t=>`<span class="spin"></span>${t}`;
+// --- Завантаження фото (клік, перетягування, вставка) і КРОК 1 ---
 function load(f){if(!f)return;if(!f.type.startsWith('image/')){toast('Це не картинка. Підійде JPG, PNG або WebP.');return}const rd=new FileReader();rd.onload=()=>{const im=new Image();im.onload=()=>{const s=Math.min(1,768/Math.max(im.width,im.height));const c=document.createElement('canvas');c.width=im.width*s;c.height=im.height*s;c.getContext('2d').drawImage(im,0,0,c.width,c.height);const u=c.toDataURL('image/jpeg',.85);IMG=u.split(',')[1];{const s2=Math.min(1,2048/Math.max(im.width,im.height));const c2=document.createElement('canvas');c2.width=im.width*s2;c2.height=im.height*s2;c2.getContext('2d').drawImage(im,0,0,c2.width,c2.height);window.ORIG=c2.toDataURL('image/jpeg',.92)}MIME='image/jpeg';start(u)};im.src=rd.result};rd.readAsDataURL(f)}
 document.addEventListener('paste',e=>{for(const it of e.clipboardData.items)if(it.type.startsWith('image/')){load(it.getAsFile());break}});
 const d=$('drop');d.onclick=()=>$('file').click();d.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();$('file').click()}};$('file').onchange=e=>load(e.target.files[0]);
@@ -105,6 +126,7 @@ document.addEventListener('click',e=>{if(!e.target.closest('#stage'))selPhoto(fa
 document.addEventListener('keydown',e=>{if(e.key==='Escape')selPhoto(false)});
 $('xbtn').addEventListener('click',e=>{e.stopPropagation();if((GEN.busy||PICKING)&&!confirm('Прибрати фото? Поточний процес буде скасовано.'))return;removePhoto()});
 function removePhoto(){PH++;PICKING=false;resetGen();IMG=null;DESC=null;SUBJ=null;window.ORIG=null;selPhoto(false);['sPrev','sDesc','sRes','sGen'].forEach(i=>$(i).classList.add('hide'));$('prev').removeAttribute('src');document.querySelectorAll('.box').forEach(b=>b.remove());$('chips').innerHTML='';$('st1').innerHTML='';$('desc').innerHTML='';$('res').innerHTML='';$('file').value='';toast('Фото прибрано.')}
+// --- Рамки навколо знайдених людей; вибір персонажа → КРОК 2 (опис) ---
 function drawBoxes(s,sel){s.forEach((o,i)=>{if(!o.box_2d)return;const [y1,x1,y2,x2]=o.box_2d;const b=document.createElement('div');b.className='box'+(i===sel?' sel':'');Object.assign(b.style,{top:y1/10+'%',left:x1/10+'%',width:(x2-x1)/10+'%',height:(y2-y1)/10+'%'});b.innerHTML=`<span>${i+1}. ${esc(o.label)}</span>`;b.onclick=e=>{e.stopPropagation();selPhoto(true);choose(i)};$('stage').appendChild(b);
  const c=document.createElement('div');c.className='chip'+(i===sel?' sel':'');c.textContent=`${i+1}. ${o.label}`;c.onclick=()=>choose(i);$('chips').appendChild(c)});
  window.choose=i=>{if(SUBJ===s[i])return;if(GEN.busy||PICKING){toast('Зачекай: поточний процес ще йде — він не перезапуститься.');return}document.querySelectorAll('.box').forEach((b,j)=>b.classList.toggle('sel',j===i));document.querySelectorAll('.chip').forEach((b,j)=>b.classList.toggle('sel',j===i));pick(s[i])}}
@@ -115,6 +137,7 @@ async function pick(s){const ph=PH;PICKING=true;resetGen();SUBJ=s;$('sDesc').cla
   $('desc').innerHTML=`<p>${esc(description.summary_uk)}</p><dl>${Object.keys(L).filter(k=>description[k]&&description[k]!=='null').map(k=>`<dt>${L[k]}</dt><dd>${esc(description[k])}</dd>`).join('')}</dl>`;search()}catch(e){if(ph===PH)showErr($('desc'),e,()=>pick(s),'Спробувати ще раз')}finally{if(ph===PH)PICKING=false}}
 const st=s=>s==='available'?'<span class="tag ok">Ймовірно у продажу</span>':s==='retired'?'<span class="tag ret">Знято з виробництва — лише вторинний ринок</span>':'<span class="tag unk">Статус невідомий</span>';
 const pv=v=>v&&v!=='null'?esc(v):'<span class="mut">невідомо</span>';
+// --- КРОК 3: пошук схожих мініфігурок ---
 async function search(){const ph=PH;$('sRes').classList.remove('hide');$('res').innerHTML=spin('Шукаю реальні мініфігурки в каталозі Brickset/BrickLink… це може зайняти до хвилини');
  try{let crop=null;try{crop=await cropB64()}catch{}const r=await api('search',{description:DESC,crop},m=>{if(ph===PH)$('res').innerHTML=spin(esc(m))});if(ph!==PH)return;
   if(!r.results.length){$('res').innerHTML='<p>Схожих мініфігурок не знайдено'+(r.message_uk?': '+esc(r.message_uk):'.')+' Створюю власну…</p>';return gen()}
@@ -132,6 +155,7 @@ function cropB64(){return new Promise(res=>{const im=new Image();im.onload=()=>{
  c.getContext('2d').drawImage(im,sx,sy,sw,sh,0,0,c.width,c.height);res(c.toDataURL('image/jpeg',.9).split(',')[1])};im.src=window.ORIG||('data:image/jpeg;base64,'+IMG)})}
 // ---- regeneration state: ONE source of truth for locks/history, owned by this page (the 3D viewer only reports lock clicks) ----
 let GEN={id:null,roles:[],hist:[],busy:false,sig:null},EPOCH=0; // EPOCH changes with every new picture/subject: a late answer for the OLD subject is dropped
+// --- КРОК 4: генерація власної фігурки та 3D-переглядач ---
 function resetGen(){EPOCH++;GEN={id:null,roles:[],hist:[],busy:false,sig:null};setBusy(false);$('genProg').innerHTML='';$('gen').innerHTML=''}
 const SIGL={head:['Голова','обличчя / голова'],hair:['Волосся','волосся'],torso:['Торс','торс'],legs:['Низ / ноги','ноги']};
 const roleShort=r=>r==='Низ / ноги'?'Ноги':r;

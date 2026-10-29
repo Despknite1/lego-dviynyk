@@ -1,3 +1,4 @@
+// Бокова панель «Найпохожіші обличчя» поруч із 3D-переглядачем (відкривається при наведенні/кліку на голову).
 // "Найпохожіші обличчя": a flyout to the RIGHT of the 3D screen (next to the parts / locks list). It opens when the user hovers or clicks the head
 // (row «Голова» in the parts list or the head on the 3D figure; the viewer iframe posts {lego_head}) — it is no longer a separate block below.
 // Shows 4–6 of the closest SAFE official faces (POST /api/face-options, no Gemini),

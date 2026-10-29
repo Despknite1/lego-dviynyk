@@ -40,3 +40,7 @@ LDraw parts library © LDraw.org contributors, CC BY 4.0. LEGO® is a trademark 
 - API: `GET /api/my/csrf`, `GET /api/my/figures`, `GET /api/my/figures/:id`, `POST /api/my/figures/:id/open {version}`, `POST /api/my/figures/:id/revert {version}`, `DELETE /api/my/figures/:id` (CSRF: заголовок `X-CSRF-Token`).
 - Ліміти: `MY_MAX_FIGURES` (50), `MY_MAX_VERSIONS` (20), `MY_RATE_PER_IP` (120/10 хв). Вимкнути: `FIGURES_ENABLED=false`.
 - Тести: `node tests/my_store.test.js`, `npm run test:my`, `npm run test:ui:my`.
+
+## Структура коду
+
+Опис папок, як працює сайт і де що міняти: [docs/STRUCTURE.md](docs/STRUCTURE.md)

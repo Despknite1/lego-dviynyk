@@ -1,3 +1,4 @@
+// Розділ «Мої фігурки» на головній сторінці: сітка збережених фігурок, історія версій, відкат, видалення.
 // «Мої фігурки»: anonymous history (httpOnly cookie identity) — grid, 3D view per version, revert, delete; «Відкат до попередньої» after regeneration.
 (() => {
   let CFG = { figures: false }, TOK = null;

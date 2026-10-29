@@ -1,3 +1,4 @@
+// Допоміжна 3D-геометрія голів для переглядача.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 // Build meshes from an LDraw printed head, keeping print colours; main colour (code 16) becomes the skin colour.
