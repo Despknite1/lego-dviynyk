@@ -38,7 +38,7 @@ LDraw parts library © LDraw.org contributors, CC BY 4.0. LEGO® is a trademark 
 - Таблиці `figures`, `figure_versions` (+ `identities`, `schema_migrations`) — міграції в `lib/my/store.js`, запускаються автоматично на старті.
 - `DATABASE_URL` задано → Postgres; ні → SQLite у `data/app.sqlite` (`/app/data` у Docker; на Render без диска — тимчасово, попередження в логах і UI).
 - API: `GET /api/my/csrf`, `GET /api/my/figures`, `GET /api/my/figures/:id`, `POST /api/my/figures/:id/open {version}`, `POST /api/my/figures/:id/revert {version}`, `DELETE /api/my/figures/:id` (CSRF: заголовок `X-CSRF-Token`).
-- Ліміти: `MY_MAX_FIGURES` (50), `MY_MAX_VERSIONS` (20), `MY_RATE_PER_IP` (120/10 хв). Вимкнути: `FIGURES_ENABLED=false`.
+- Ліміти: `MY_MAX_FIGURES` (50), `MY_MAX_VERSIONS` (100), `MY_RATE_PER_IP` (120/10 хв). Вимкнути: `FIGURES_ENABLED=false`.
 - Тести: `node tests/my_store.test.js`, `npm run test:my`, `npm run test:ui:my`.
 
 ## Структура коду
