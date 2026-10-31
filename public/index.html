@@ -176,8 +176,8 @@ const pv=v=>v&&v!=='null'?esc(v):'<span class="mut">невідомо</span>';
 // --- КРОК 3: пошук схожих мініфігурок ---
 async function search(){const ph=PH;$('sRes').classList.remove('hide');$('res').innerHTML=spin('Шукаю реальні мініфігурки в каталозі Brickset/BrickLink… це може зайняти до хвилини');
  try{let crop=null;try{crop=await cropB64()}catch{}const r=await api('search',{description:DESC,crop},m=>{if(ph===PH)$('res').innerHTML=spin(esc(m))});if(ph!==PH)return;
-  if(!r.results.length){$('res').innerHTML='<p>Схожих мініфігурок не знайдено'+(r.message_uk?': '+esc(r.message_uk):'.')+' Створюю власну…</p>';return gen()}
-  $('res').innerHTML=`<div class="grid">${r.results.map(x=>`<div class="res">${x.image?`<img src="${x.image}" loading="lazy">`:'<div class="mut" style="height:60px">Зображення не знайдено (номер не підтверджено в каталозі BrickLink)</div>'}
+  if(!r.results.length){$('res').innerHTML='<p>Схожих мініфігурок не знайдено'+(r.message_uk?': '+esc(r.message_uk):'.')+(r.note_uk?' '+esc(r.note_uk):'')+' Створюю власну…</p>';return gen()}
+  $('res').innerHTML=`${r.note_uk?`<p class="mut">${esc(r.note_uk)}</p>`:''}<div class="grid">${r.results.map(x=>`<div class="res">${x.image?`<img src="${x.image}" loading="lazy">`:'<div class="mut" style="height:60px">Зображення не знайдено (номер не підтверджено в каталозі BrickLink)</div>'}
    <h3>${esc(x.name)} <span class="mut">${esc(x.fig_num)}</span></h3><div class="mut">Схожість: ${esc(x.similarity)}%</div><p>${esc(x.why_uk)}</p>
    <div>Фігурка на вторинному ринку: нова ${pv(x.fig_resale?.new)}, вживана ${pv(x.fig_resale?.used)} <span class="mut">(${esc(x.fig_resale?.source)})</span></div>${x.sets_total>3?`<div class="mut">Є у ${x.sets_total} наборах, показано 3</div>`:''}
    <div class="links">${Object.entries(x.links||{}).map(([k,u])=>`<a href="${u}" target="_blank">${k}</a>`).join('')}</div>

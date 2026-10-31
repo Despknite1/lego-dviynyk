@@ -326,6 +326,11 @@ async function build() {
   const GRIP = new THREE.Matrix4().makeTranslation(0, -0.82, -9.9).multiply(new THREE.Matrix4().makeRotationX(Math.atan2(0.25, 0.968)));
   const held = async (part, hm, mat, extra) => { const g = await loadPart(part).catch(() => null); if (!g) return null; const m = toMesh(g, mat); m.applyMatrix4(hm.clone().multiply(GRIP).multiply(extra || new THREE.Matrix4())); fig.add(m); PARTS.push({ id: part, color: '#' + mat.color.getHexString(), mesh: m }); return m; };
   if ((a = has('sword')) && handM[0]) await held(/long|great/i.test(a.kind || '') ? '18031' : '3847', handM[0], plastic(a.color || '#A0A5A9', { metalness: 0.55, roughness: 0.28 }), new THREE.Matrix4().makeRotationY(Math.PI / 2));
+  if ((a = has('club')) && handM[0] && !has('sword')) { const hp = new THREE.Vector3().setFromMatrixPosition(handM[0].clone().multiply(GRIP)), c = a.color || '#7C503A', bat = a.kind === 'bat';
+    const g = new THREE.Group(); const handle = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.5, 10, 14), plastic(c)); handle.position.y = 0; g.add(handle);
+    const head = new THREE.Mesh(new THREE.CylinderGeometry(bat ? 2.6 : 3.4, 1.6, bat ? 22 : 18, 16), plastic(c)); head.position.y = -(bat ? 16 : 14); g.add(head);
+    g.position.copy(hp); g.rotation.x = Math.PI * 0.85; g.traverse(o => { if (o.isMesh) o.castShadow = true; }); fig.add(g); fig.updateMatrixWorld(true);
+    (window.CUSTOM_PARTS = window.CUSTOM_PARTS || []).push(bat ? 'Бита' : 'Дубинка'); PARTS.push({ id: 'custom-club', title: (bat ? 'Бита' : 'Дубинка') + ' (власна 3D-модель, найближчий аналог LEGO-аксесуара)', color: c, mesh: g }); }
   if (bagA && !/crossbody|belt/i.test(bagA.style || '')) { const hmx = handM[!has('shield') ? 1 : 0]; if (hmx) { (window.CUSTOM_PARTS = window.CUSTOM_PARTS || []).push('Сумочка в руці (мініфіг-масштаб; найближча офіційна — Friends handbag 93091)');
     const hp = new THREE.Vector3().setFromMatrixPosition(hmx.clone().multiply(GRIP)), c = bagA.color || '#1b1b1b', g = new THREE.Group();
     const body = new THREE.Mesh(new RoundedBox(9, 7, 3.4, 1.3), plastic(c)); body.position.y = -8.6; g.add(body); const flap = new THREE.Mesh(new RoundedBox(9.3, 3.2, 3.8, 1.1), plastic(c)); flap.position.y = -6.3; g.add(flap);
